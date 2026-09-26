@@ -552,9 +552,29 @@ body {
   color: #fff;
 }
 
+.processing-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.processing-timer-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-family: monospace;
+  font-weight: 700;
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  padding: 2px 7px;
+  border-radius: 9999px;
+  letter-spacing: 0.3px;
+}
+
 .progress-bar-wrap {
   width: 100%;
-  height: 5px;
+  height: 6px;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 9999px;
   overflow: hidden;
@@ -562,17 +582,177 @@ body {
 
 .progress-fill-bar {
   height: 100%;
-  background: var(--accent-gradient);
+  background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+  background-size: 200% 100%;
+  animation: shimmerProgress 2s linear infinite;
   border-radius: 9999px;
-  transition: width 0.3s ease;
+  transition: width 0.35s ease-out;
+}
+
+@keyframes shimmerProgress {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+.progress-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
 }
 
 .processing-subtext {
   font-size: 10.5px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+}
+
+.processing-percent-text {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #a5b4fc;
+  font-family: monospace;
+  flex-shrink: 0;
+}
+
+/* Failure & Error Notice Card */
+.error-notice-card {
+  margin-top: 10px;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(239, 68, 68, 0.09);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: fadeIn 0.25s ease;
+}
+
+.error-notice-card.timeout {
+  background: rgba(245, 158, 11, 0.09);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.error-notice-card.no-product {
+  background: rgba(59, 130, 246, 0.09);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.error-notice-card.unsupported {
+  background: rgba(168, 85, 247, 0.09);
+  border-color: rgba(168, 85, 247, 0.4);
+}
+
+.error-notice-card.missing-photo {
+  background: rgba(236, 72, 153, 0.09);
+  border-color: rgba(236, 72, 153, 0.4);
+}
+
+.error-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.error-card-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.error-card-titles {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.error-card-titles h4 {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.error-card-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.error-notice-card.timeout .error-card-badge {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.error-notice-card.no-product .error-card-badge {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.error-notice-card.unsupported .error-card-badge {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
+.error-notice-card.missing-photo .error-card-badge {
+  background: rgba(236, 72, 153, 0.2);
+  color: #f472b6;
+}
+
+.error-card-msg {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.error-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.error-action-btn {
+  background: var(--accent-primary);
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.error-action-btn:hover {
+  filter: brightness(1.15);
+}
+
+.error-dismiss-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.error-dismiss-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
 }
 
 /* 4. Results View */
+
 .results-viewport {
   min-height: 140px;
   position: relative;

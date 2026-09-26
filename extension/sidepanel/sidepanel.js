@@ -93,6 +93,17 @@ const refreshClosetBtn = document.getElementById('refresh-closet-btn');
 const closetEmptyState = document.getElementById('closet-empty-state');
 const closetGrid = document.getElementById('closet-grid');
 
+// Phase 12 Progress & Error Notice References
+const processingTimer = document.getElementById('processing-timer');
+const processingPercent = document.getElementById('processing-percent');
+const errorNoticeCard = document.getElementById('error-notice-card');
+const errorCardIcon = document.getElementById('error-card-icon');
+const errorCardTitle = document.getElementById('error-card-title');
+const errorCardBadge = document.getElementById('error-card-badge');
+const errorCardMessage = document.getElementById('error-card-message');
+const errorActionBtn = document.getElementById('error-action-btn');
+const errorDismissBtn = document.getElementById('error-dismiss-btn');
+
 // --- 1. Lightweight Storage Sync Helpers ---
 
 async function getStoredState() {
@@ -385,39 +396,184 @@ function updateTryOnButtonState() {
   }
 }
 
-async function handleTryOnExecution(forceRefresh = false) {
-  if (!state.selectedProductId || !state.activeProfileId || state.isProcessing) return;
+// --- 4.5 Real-Time Progress Tracker & Error Surfacing ---
 
+let progressInterval = null;
+let progressStartTime = 0;
+
+function startProgressTracker(forceRefresh = false) {
+  stopProgressTracker(false);
+  progressStartTime = Date.now();
+  if (processingTimer) processingTimer.textContent = '0.0s';
+  if (processingPercent) processingPercent.textContent = '10%';
+  if (pipelineProgressFill) pipelineProgressFill.style.width = '10%';
+
+  progressInterval = setInterval(() => {
+    const elapsedSec = (Date.now() - progressStartTime) / 1000;
+    if (processingTimer) {
+      processingTimer.textContent = `${elapsedSec.toFixed(1)}s`;
+    }
+
+    // Dynamic curve simulating 5-25s diffusion inference with live milestone feedback
+    let currentPct = 10;
+    if (elapsedSec < 1.0) {
+      currentPct = 10 + elapsedSec * 15; // 10 -> 25%
+      setStepStatus(stageClip, 'active', 'Step 1: Identifying product attributes & front view...');
+    } else if (elapsedSec < 2.5) {
+      setStepStatus(stageClip, 'done', 'Target identified & front-angle normalized');
+      setStepStatus(stagePose, 'active', 'Step 2: Resolving profile pose & body keypoints...');
+      currentPct = 25 + (elapsedSec - 1.0) * 13; // 25 -> 45%
+    } else {
+      setStepStatus(stageClip, 'done', 'Target identified');
+      setStepStatus(stagePose, 'done', 'Profile pose aligned');
+      setStepStatus(stageVton, 'active', forceRefresh ? 'Step 3: Neural diffusion re-generating (cache bypassed)...' : 'Step 3: Neural diffusion drape synthesis...');
+
+      if (elapsedSec < 7.0) {
+        currentPct = 45 + (elapsedSec - 2.5) * 5.5; // 45 -> 70%
+        processingDetailText.textContent = 'Denoising garment warp & fabric textures...';
+      } else if (elapsedSec < 16.0) {
+        currentPct = 70 + (elapsedSec - 7.0) * 1.6; // 70 -> 84%
+        processingDetailText.textContent = 'Synthesizing realistic body contours & lighting...';
+      } else if (elapsedSec < 28.0) {
+        currentPct = 84 + (elapsedSec - 16.0) * 0.6; // 84 -> 91%
+        processingDetailText.textContent = 'ZeroGPU worker finalizing composite drape...';
+      } else {
+        currentPct = 93;
+        processingDetailText.textContent = 'ZeroGPU worker allocating compute (almost ready)...';
+      }
+    }
+
+    currentPct = Math.min(94, Math.round(currentPct));
+    if (pipelineProgressFill) pipelineProgressFill.style.width = `${currentPct}%`;
+    if (processingPercent) processingPercent.textContent = `${currentPct}%`;
+  }, 100);
+}
+
+function stopProgressTracker(success = true) {
+  if (progressInterval) {
+    clearInterval(progressInterval);
+    progressInterval = null;
+  }
+  if (success) {
+    const elapsedSec = ((Date.now() - progressStartTime) / 1000).toFixed(1);
+    if (processingTimer) processingTimer.textContent = `${elapsedSec}s`;
+    if (pipelineProgressFill) pipelineProgressFill.style.width = '100%';
+    if (processingPercent) processingPercent.textContent = '100%';
+  }
+}
+
+function showErrorNotice(type, title, message, actionLabel = null, actionFn = null) {
+  if (!errorNoticeCard) return;
+  hideErrorNotice();
+
+  errorNoticeCard.className = `error-notice-card ${type}`;
+
+  const icons = {
+    timeout: '⏱️',
+    'no-product': '🛍️',
+    unsupported: '🚫',
+    'missing-photo': '👤',
+    offline: '🔌',
+    generic: '⚠️',
+  };
+
+  const badges = {
+    timeout: 'Timeout',
+    'no-product': 'No Apparel',
+    unsupported: 'Unsupported',
+    'missing-photo': 'Photo Needed',
+    offline: 'Offline',
+    generic: 'Issue',
+  };
+
+  if (errorCardIcon) errorCardIcon.textContent = icons[type] || '⚠️';
+  if (errorCardTitle) errorCardTitle.textContent = title;
+  if (errorCardBadge) errorCardBadge.textContent = badges[type] || 'Notice';
+  if (errorCardMessage) errorCardMessage.textContent = message;
+
+  if (actionLabel && actionFn && errorActionBtn) {
+    errorActionBtn.textContent = actionLabel;
+    errorActionBtn.classList.remove('hidden');
+    errorActionBtn.onclick = () => {
+      hideErrorNotice();
+      actionFn();
+    };
+  } else if (errorActionBtn) {
+    errorActionBtn.classList.add('hidden');
+  }
+
+  errorNoticeCard.classList.remove('hidden');
+}
+
+function hideErrorNotice() {
+  if (errorNoticeCard) {
+    errorNoticeCard.classList.add('hidden');
+  }
+}
+
+async function handleTryOnExecution(forceRefresh = false) {
+  hideErrorNotice();
+
+  // Distinct check 1: No products detected on page
+  if (!state.products || state.products.length === 0) {
+    showErrorNotice(
+      'no-product',
+      'No Apparel Detected',
+      'No clothing products have been detected on this page yet. Please browse an apparel store or tap the "+" button above to add our sample demo garment.',
+      '➕ Add Demo Garment',
+      addDemoProduct
+    );
+    return;
+  }
+
+  // Distinct check 2: No product selected
   const selectedProd = state.products.find((p) => p.id === state.selectedProductId);
-  if (!selectedProd) return;
+  if (!selectedProd) {
+    showErrorNotice(
+      'no-product',
+      'Select a Product',
+      'Please select one of the detected clothing items above to begin your virtual try-on.',
+      'Select First Item',
+      () => {
+        if (state.products.length > 0) selectProduct(state.products[0].id);
+      }
+    );
+    return;
+  }
+
+  // Distinct check 3: No profile loaded
+  if (!state.activeProfileId) {
+    showErrorNotice(
+      'missing-photo',
+      'No Profile Loaded',
+      'Please select or create a digital profile first before running virtual try-on.',
+      '👤 Open Studio',
+      openStudio
+    );
+    return;
+  }
 
   const chosenGarmentImg = state.variantSelections[selectedProd.id] || selectedProd.imageUrl;
-  if (!chosenGarmentImg) return;
+  if (!chosenGarmentImg) {
+    showErrorNotice(
+      'no-product',
+      'Missing Garment Image',
+      'Could not find a valid product image URL for this item.',
+      'Rescan Page',
+      scanActivePageProducts
+    );
+    return;
+  }
 
   state.isProcessing = true;
   updateTryOnButtonState();
 
-  // Show Processing Status Area
+  // Show Processing Status Area & Start Live Timer Tracker
   processingStatusArea.classList.remove('hidden');
   resetPipelineSteps();
+  startProgressTracker(forceRefresh);
 
   try {
-    // Step 1: Garment & Variant Analysis
-    setStepStatus(stageClip, 'active', 'Step 1: Analyzing garment variant & category...');
-    pipelineProgressFill.style.width = '25%';
-    await delay(350);
-    setStepStatus(stageClip, 'done', `Garment identified: ${selectedProd.category || 'Apparel'}`);
-
-    // Step 2: MediaPipe Landmark resolution
-    setStepStatus(stagePose, 'active', 'Step 2: Resolving profile pose & body keypoints...');
-    pipelineProgressFill.style.width = '50%';
-    await delay(350);
-    setStepStatus(stagePose, 'done', 'Profile pose aligned with garment drape');
-
-    // Step 3: Synthesis via Specialized Pipeline or Instant Cache Hit
-    setStepStatus(stageVton, 'active', forceRefresh ? 'Step 3: Re-generating fitting (cache bypassed)...' : 'Step 3: Checking cache & executing synthesis...');
-    pipelineProgressFill.style.width = '75%';
-
     const payload = {
       profile_id: state.activeProfileId,
       garment_image_url: chosenGarmentImg,
@@ -438,18 +594,20 @@ async function handleTryOnExecution(forceRefresh = false) {
       let errorMsg = `Server error ${response.status}`;
       try {
         const errorData = await response.json();
-        errorMsg = errorData.detail || errorMsg;
+        errorMsg = (typeof errorData.detail === 'object' && errorData.detail.message)
+          ? errorData.detail.message
+          : (errorData.detail || errorMsg);
       } catch (_) {}
       throw new Error(errorMsg);
     }
 
     const tryonResult = await response.json();
 
+    stopProgressTracker(true);
     const handlerLabel = tryonResult.cached
       ? '⚡ Instant Cache Hit'
       : (tryonResult.handler_name || 'Try-on synthesis');
     setStepStatus(stageVton, 'done', `${handlerLabel} complete!`);
-    pipelineProgressFill.style.width = '100%';
     await delay(350);
 
     // Reveal Result View with real composited image
@@ -457,18 +615,66 @@ async function handleTryOnExecution(forceRefresh = false) {
     await loadClosetHistory(state.activeProfileId);
   } catch (err) {
     console.error('Try-On error:', err);
+    stopProgressTracker(false);
     setStepStatus(stageVton, 'error', `Try-On failed: ${err.message}`);
     processingMainStatus.textContent = 'Virtual Try-On error';
     processingDetailText.textContent = err.message;
-    alert(`Virtual Try-On error:\n${err.message}`);
+
+    const errMsg = err.message || '';
+    const errLower = errMsg.toLowerCase();
+
+    if (errLower.includes('timeout') || errLower.includes('timed out') || errLower.includes('504')) {
+      showErrorNotice(
+        'timeout',
+        'Model Inference Timeout',
+        'The CatVTON neural diffusion model took longer than 30s to respond. Hugging Face ZeroGPU workers occasionally experience cold starts (30–60s). Please wait a moment and try again.',
+        '🔄 Retry Try-On',
+        () => handleTryOnExecution(true)
+      );
+    } else if (errLower.includes('unsupported category') || errLower.includes('422')) {
+      showErrorNotice(
+        'unsupported',
+        'Unsupported Garment Category',
+        errMsg,
+        'Browse Apparel',
+        () => {}
+      );
+    } else if (errLower.includes('no uploaded photos') || errLower.includes('missing reference photo')) {
+      showErrorNotice(
+        'missing-photo',
+        'Reference Photo Needed',
+        errMsg,
+        '👤 Open Profile Studio',
+        openStudio
+      );
+    } else if (errLower.includes('failed to fetch') || errLower.includes('network') || errLower.includes('500') || errLower.includes('offline')) {
+      showErrorNotice(
+        'offline',
+        'Backend Server Offline',
+        'Could not communicate with the virtual try-on backend. Please verify that the FastAPI server is running on http://127.0.0.1:8000.',
+        'Check Health',
+        checkBackendHealth
+      );
+    } else {
+      showErrorNotice(
+        'generic',
+        'Virtual Try-On Issue',
+        errMsg,
+        '🔄 Retry',
+        () => handleTryOnExecution(false)
+      );
+    }
   } finally {
     state.isProcessing = false;
     updateTryOnButtonState();
     setTimeout(() => {
-      processingStatusArea.classList.add('hidden');
-    }, 3000);
+      if (!errorNoticeCard || errorNoticeCard.classList.contains('hidden')) {
+        processingStatusArea.classList.add('hidden');
+      }
+    }, 3500);
   }
 }
+
 
 
 function resetPipelineSteps() {
@@ -727,6 +933,10 @@ if (refreshClosetBtn) {
     if (state.activeProfileId) loadClosetHistory(state.activeProfileId);
   });
 }
+if (errorDismissBtn) {
+  errorDismissBtn.addEventListener('click', hideErrorNotice);
+}
+
 
 // --- 7. Initialization ---
 

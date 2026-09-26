@@ -38,6 +38,22 @@ class TryOnRouterRegistry:
                 return handler
         return self._default_handler
 
+    def is_supported(self, category: str) -> bool:
+        """
+        Check if the category is recognized by any registered try-on handler.
+        Returns False for non-wearable or unsupported categories like 'electronics', 'furniture', etc.
+        """
+        if not category:
+            return True
+        cat_clean = category.strip().lower()
+        if cat_clean in ["auto", "overall", "unknown", "apparel", "clothing"]:
+            return True
+        for handler in self._handlers:
+            if handler.can_handle(cat_clean):
+                return True
+        return False
+
+
     def list_handlers(self) -> List[Dict[str, any]]:
         """Return introspection info on registered handlers."""
         return [

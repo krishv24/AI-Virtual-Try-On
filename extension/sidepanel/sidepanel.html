@@ -108,14 +108,15 @@
         <!-- Status Area for Processing Feedback -->
         <div id="processing-status-area" class="processing-status-area hidden">
           <div class="processing-header">
-            <div class="spinner-small"></div>
+            <div class="spinner-small" id="processing-spinner"></div>
             <strong id="processing-main-status">Synthesizing drape...</strong>
+            <span id="processing-timer" class="processing-timer-badge">0.0s</span>
           </div>
 
           <div class="pipeline-stages">
             <div class="stage-step" id="stage-clip">
               <span class="stage-indicator">1</span>
-              <span>CLIP Classification</span>
+              <span>Garment Analysis</span>
             </div>
             <div class="stage-step" id="stage-pose">
               <span class="stage-indicator">2</span>
@@ -123,16 +124,36 @@
             </div>
             <div class="stage-step" id="stage-vton">
               <span class="stage-indicator">3</span>
-              <span>CatVTON Drape</span>
+              <span>ZeroGPU Drape</span>
             </div>
           </div>
 
           <div class="progress-bar-wrap">
-            <div id="pipeline-progress-fill" class="progress-fill-bar" style="width: 20%;"></div>
+            <div id="pipeline-progress-fill" class="progress-fill-bar" style="width: 10%;"></div>
           </div>
-          <span id="processing-detail-text" class="processing-subtext">Initializing pipeline...</span>
+          <div class="progress-meta-row">
+            <span id="processing-detail-text" class="processing-subtext">Initializing pipeline...</span>
+            <span id="processing-percent" class="processing-percent-text">10%</span>
+          </div>
+        </div>
+
+        <!-- Distinct Failure & Error Notice Card -->
+        <div id="error-notice-card" class="error-notice-card hidden">
+          <div class="error-card-header">
+            <span id="error-card-icon" class="error-card-icon">⚠️</span>
+            <div class="error-card-titles">
+              <h4 id="error-card-title">Virtual Try-On Issue</h4>
+              <span id="error-card-badge" class="error-card-badge">Notice</span>
+            </div>
+          </div>
+          <p id="error-card-message" class="error-card-msg">Detailed error description.</p>
+          <div class="error-card-actions">
+            <button id="error-action-btn" class="error-action-btn">Retry Try-On</button>
+            <button id="error-dismiss-btn" class="error-dismiss-btn">Dismiss</button>
+          </div>
         </div>
       </section>
+
 
       <!-- 4. Results View -->
       <section class="panel-card results-card">

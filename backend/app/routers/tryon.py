@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import os
 import shutil
 import sqlite3
@@ -26,6 +28,7 @@ from app.services.tryon_router import tryon_router_registry
 import json
 
 router = APIRouter(prefix="/api/tryon", tags=["Virtual Try-On"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/status", response_model=TryOnStatusResponse)
@@ -157,8 +160,16 @@ async def create_tryon(
                 garment_image_url=cached_row["garment_image_url"] if "garment_image_url" in cached_row.keys() else request.garment_image_url,
             )
 
+    # Phase 12: Validate that category is supported
+    if not tryon_router_registry.is_supported(effective_category):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unsupported category '{effective_category}'. Virtual try-on currently supports: shirts, t-shirts, dresses, jackets, pants/trousers, shoes, necklaces, and jewelry.",
+        )
+
     # 2. Resolve profile photo upfront (validates profile exists and has uploaded photos)
     handler = tryon_router_registry.get_handler(effective_category)
+
     requested_type = request.photo_type or handler.get_preferred_photo_type(effective_category)
     photo_id, profile_photo_path, matched_photo_type = catvton_service.resolve_profile_photo(
         profile_id=request.profile_id,
@@ -195,13 +206,34 @@ async def create_tryon(
                         pass
 
         # 5. Execute handler synthesis pipeline
-        composited_temp_path = handler.execute(
-            person_photo_path=profile_photo_path,
-            garment_photo_path=garment_path,
-            category=effective_category,
-            profile_id=request.profile_id,
-            conn=conn,
-        )
+        try:
+            composited_temp_path = handler.execute(
+                person_photo_path=profile_photo_path,
+                garment_photo_path=garment_path,
+                category=effective_category,
+                profile_id=request.profile_id,
+                conn=conn,
+            )
+        except HTTPException:
+            raise
+        except (TimeoutError, asyncio.TimeoutError) as e:
+            logger.error(f"Try-on generation timeout: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=f"Virtual Try-On AI model timed out after waiting for compute: {str(e)}. The model space may be waking up or queue is full. Please try again."
+            )
+        except Exception as e:
+            err_msg = str(e)
+            if "timeout" in err_msg.lower() or "timed out" in err_msg.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail=f"Virtual Try-On AI model timed out: {err_msg}"
+                )
+            logger.error(f"Try-on synthesis error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Try-on generation failed: {err_msg}"
+            )
 
         # 6. Phase 9 Accuracy Safeguards: validate color and pattern fidelity
         accuracy_data = accuracy_validator.validate_accuracy(

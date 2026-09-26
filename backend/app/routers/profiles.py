@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, s
 from app.database import get_db
 from app.config import settings
 from app.services.catvton_service import catvton_service
+from app.services.image_processor import image_processor
 from app.models.schemas import (
     ProfileCreate,
     ProfileUpdate,
@@ -208,8 +209,19 @@ async def upload_profile_photo(
     if len(contents) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
+    # Phase 12: Resize / Compress uploaded photos (cap dimensions at 1024px)
+    try:
+        target_fmt = "PNG" if content_type == "image/png" else "WEBP" if content_type == "image/webp" else "JPEG"
+        processed_bytes = image_processor.optimize_image_bytes(
+            image_bytes=contents,
+            max_dim=1024,
+            output_format=target_fmt,
+        )
+    except Exception:
+        processed_bytes = contents
+
     # Validate landmarks with MediaPipe
-    is_valid, validation_message, metadata = validate_photo_landmarks(contents, photo_type)
+    is_valid, validation_message, metadata = validate_photo_landmarks(processed_bytes, photo_type)
     if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -238,9 +250,10 @@ async def upload_profile_photo(
     # Write file to non-public local disk
     try:
         with open(destination_path, "wb") as f:
-            f.write(contents)
+            f.write(processed_bytes)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save image: {str(e)}")
+
 
     now = datetime.now(timezone.utc).isoformat()
     cursor.execute(

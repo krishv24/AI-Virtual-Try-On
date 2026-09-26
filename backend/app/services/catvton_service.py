@@ -16,6 +16,8 @@ from huggingface_hub import HfApi
 
 from app.config import settings
 from app.models.schemas import PhotoType
+from app.services.image_processor import image_processor
+
 
 
 class CatVTONService:
@@ -200,7 +202,14 @@ class CatVTONService:
                 data = base64.b64decode(encoded)
                 with open(target_path, "wb") as f:
                     f.write(data)
+                # Phase 12: Resize / Compress garment image (cap dimensions at 1024px)
+                try:
+                    image_processor.optimize_image_file(target_path, target_path, max_dim=1024)
+                except Exception:
+                    pass
                 return target_path
+            except HTTPException:
+                raise
             except Exception as e:
                 raise HTTPException(
                     status_code=400,
@@ -218,7 +227,18 @@ class CatVTONService:
                     response.raise_for_status()
                     with open(target_path, "wb") as f:
                         f.write(response.content)
+
+                # Phase 12: Resize / Compress garment image (cap dimensions at 1024px)
+                try:
+                    image_processor.optimize_image_file(target_path, target_path, max_dim=1024)
+                except Exception:
+                    pass
                 return target_path
+            except httpx.TimeoutException:
+                raise HTTPException(
+                    status_code=504,
+                    detail="Product Image Timeout: Download of product garment image timed out from retailer site. Please try again or use another product.",
+                )
             except Exception as e:
                 raise HTTPException(
                     status_code=400,
@@ -229,6 +249,10 @@ class CatVTONService:
         local_path = Path(garment_url)
         if local_path.exists():
             shutil.copy(local_path, target_path)
+            try:
+                image_processor.optimize_image_file(target_path, target_path, max_dim=1024)
+            except Exception:
+                pass
             return target_path
 
         raise HTTPException(
@@ -278,19 +302,34 @@ class CatVTONService:
             else:
                 raise RuntimeError(f"Unexpected result format from CatVTON Space: {result}")
 
+        except HTTPException:
+            raise
         except Exception as e:
+            err_msg = str(e)
+            if "timeout" in err_msg.lower() or "timed out" in err_msg.lower():
+                raise HTTPException(
+                    status_code=504,
+                    detail="Model Timeout: Virtual try-on inference exceeded time limit (30s). The ZeroGPU worker may be busy or waking up. Please click Re-try in a few moments.",
+                )
+
             # Check space status to give detailed feedback
             status = self.get_space_status()
             stage = status.get("stage", "UNKNOWN")
             if stage in ["BUILDING", "APP_STARTING"]:
                 raise HTTPException(
                     status_code=503,
-                    detail=f"CatVTON Space is currently initializing (stage: {stage}). Please retry in 1-2 minutes.",
+                    detail=f"Model Warming Up: Hugging Face ZeroGPU Space is currently {stage}. Cold starts take 30–60 seconds. Please retry shortly.",
+                )
+            elif stage in ["SLEEPING", "PAUSED"]:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Model Sleeping: The ZeroGPU space is currently waking up from sleep mode. Please retry in 20 seconds.",
                 )
             raise HTTPException(
                 status_code=500,
-                detail=f"CatVTON inference execution failed: {e}",
+                detail=f"CatVTON inference execution failed: {err_msg}",
             )
+
 
 
 catvton_service = CatVTONService()

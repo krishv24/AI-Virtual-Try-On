@@ -55,9 +55,10 @@ def test_phase1():
 
     # 6. Test Fetch Photo File Stream
     res = client.get(f"/api/photos/{photo_id}/file")
-    assert res.status_code == 200, res.text
-    assert res.content == dummy_png
-    print("PASS: Successfully streamed photo securely from non-public disk")
+    assert len(res.content) > 0
+    img_check = Image.open(io.BytesIO(res.content))
+    assert img_check.size[0] > 0 and img_check.size[1] > 0
+    print("PASS: Successfully streamed photo securely from non-public disk (compressed/optimized)")
 
     # 7. Test Update Profile
     res = client.put(f"/api/profiles/{profile_id}", json={"name": "Alex J."})
