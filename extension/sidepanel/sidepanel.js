@@ -179,6 +179,43 @@ function renderModelPhoto() {
   }
 }
 
+// --- 2.5 Front Shot Heuristics for Variant Handling ---
+
+function scoreProductImage(url) {
+  if (!url) return -100;
+  const lower = url.toLowerCase();
+  let score = 0;
+  if (lower.includes('front')) score += 50;
+  if (lower.includes('main') || lower.includes('primary') || lower.includes('hero')) score += 40;
+  if (lower.includes('flat') || lower.includes('ghost') || lower.includes('packshot')) score += 45;
+  if (lower.includes('white') || lower.includes('clean')) score += 25;
+  if (lower.includes('back') || lower.includes('rear')) score -= 45;
+  if (lower.includes('side')) score -= 25;
+  if (lower.includes('detail') || lower.includes('zoom')) score -= 35;
+  if (lower.includes('swatch') || lower.includes('thumb')) score -= 40;
+  if (lower.includes('lifestyle') || lower.includes('lookbook') || lower.includes('editorial') || lower.includes('street')) score -= 50;
+  if (lower.includes('2000') || lower.includes('1500') || lower.includes('hires')) score += 15;
+  return score;
+}
+
+function selectBestFrontShot(imageUrls) {
+  if (!imageUrls || imageUrls.length === 0) return null;
+  if (imageUrls.length === 1) return imageUrls[0];
+  let best = imageUrls[0];
+  let maxScore = scoreProductImage(best);
+  for (let i = 1; i < imageUrls.length; i++) {
+    const s = scoreProductImage(imageUrls[i]);
+    if (s > maxScore) {
+      maxScore = s;
+      best = imageUrls[i];
+    }
+  }
+  return best;
+}
+
+// Map tracking chosen variant per product
+state.variantSelections = {};
+
 // --- 3. Products on this Page ---
 
 function renderProducts() {
@@ -199,37 +236,92 @@ function renderProducts() {
   productsGrid.innerHTML = '';
 
   state.products.forEach((prod) => {
+    const images = Array.isArray(prod.imageUrls) && prod.imageUrls.length > 0
+      ? prod.imageUrls
+      : [prod.imageUrl].filter(Boolean);
+
+    const autoFrontShot = selectBestFrontShot(images);
+    if (!state.variantSelections[prod.id]) {
+      state.variantSelections[prod.id] = autoFrontShot || images[0];
+    }
+
+    const currentImg = state.variantSelections[prod.id];
+    const isSelected = state.selectedProductId === prod.id;
+
     const card = document.createElement('div');
-    card.className = `product-card ${state.selectedProductId === prod.id ? 'selected' : ''}`;
+    card.className = `product-card ${isSelected ? 'selected' : ''}`;
     card.dataset.id = prod.id;
 
     card.innerHTML = `
-      <img src="${prod.imageUrl}" alt="${prod.title}" class="product-thumb" loading="lazy">
+      <img src="${currentImg}" alt="${prod.title}" class="product-thumb" id="sp-thumb-${prod.id}" loading="lazy">
       <div class="product-meta">
         <span class="product-name" title="${prod.title}">${prod.title}</span>
         <div class="product-tags">
-          <span class="category-tag">${prod.category}</span>
-          <span class="product-price">${prod.price}</span>
+          <span class="category-tag">${prod.category || 'Apparel'}</span>
+          <span class="product-price">${prod.price || ''}</span>
         </div>
       </div>
     `;
 
-    card.addEventListener('click', () => selectProduct(prod.id));
+    // Multiple Images Variant Selector
+    if (images.length > 1) {
+      const variantStrip = document.createElement('div');
+      variantStrip.style.cssText = 'display:flex; gap:4px; overflow-x:auto; padding-top:4px; border-top:1px solid rgba(255,255,255,0.06); margin-top:2px;';
+
+      images.forEach((imgUrl, idx) => {
+        const t = document.createElement('img');
+        t.src = imgUrl;
+        t.style.cssText = `width:26px; height:30px; object-fit:cover; border-radius:3px; cursor:pointer; border:1.5px solid ${imgUrl === currentImg ? '#818cf8' : 'transparent'}; flex-shrink:0;`;
+        t.title = imgUrl === autoFrontShot ? '⭐ Clearest Front Shot (Auto-selected)' : `Angle #${idx + 1}`;
+
+        t.addEventListener('click', (e) => {
+          e.stopPropagation();
+          state.variantSelections[prod.id] = imgUrl;
+          const mainThumb = document.getElementById(`sp-thumb-${prod.id}`);
+          if (mainThumb) mainThumb.src = imgUrl;
+
+          variantStrip.querySelectorAll('img').forEach((thumb) => {
+            thumb.style.borderColor = 'transparent';
+          });
+          t.style.borderColor = '#818cf8';
+
+          selectProduct(prod.id, imgUrl);
+        });
+
+        variantStrip.appendChild(t);
+      });
+
+      card.appendChild(variantStrip);
+    }
+
+    card.addEventListener('click', () => selectProduct(prod.id, currentImg));
     productsGrid.appendChild(card);
   });
 
   updateTryOnButtonState();
 }
 
-function selectProduct(productId) {
-  if (state.selectedProductId === productId) {
-    // Deselect if already selected
+function selectProduct(productId, chosenImageUrl) {
+  if (state.selectedProductId === productId && !chosenImageUrl) {
     state.selectedProductId = null;
+    setStoredState({ selectedProductId: null, activeTryOnTarget: null });
   } else {
     state.selectedProductId = productId;
-  }
+    const prod = state.products.find((p) => p.id === productId);
+    const img = chosenImageUrl || state.variantSelections[productId] || prod?.imageUrl;
 
-  setStoredState({ selectedProductId: state.selectedProductId });
+    const target = {
+      productId,
+      title: prod ? prod.title : '',
+      price: prod ? prod.price : '',
+      category: prod ? prod.category : 'Apparel',
+      selectedImageUrl: img,
+      sourceUrl: prod ? prod.sourceUrl : window.location.href,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setStoredState({ selectedProductId: productId, activeTryOnTarget: target });
+  }
 
   // Update card styles
   document.querySelectorAll('.product-card').forEach((card) => {
@@ -355,8 +447,8 @@ function showResultView(product) {
   resultsContent.classList.remove('hidden');
   resultsActions.classList.remove('hidden');
 
-  // Preview generated result (using garment thumbnail for Phase 3 shell demonstration)
-  resultImg.src = product.imageUrl;
+  const chosenImg = state.variantSelections[product.id] || product.imageUrl;
+  resultImg.src = chosenImg;
   resultGarmentTitle.textContent = product.title;
   resultCategoryTag.textContent = product.category;
 
@@ -366,6 +458,7 @@ function showResultView(product) {
       productId: product.id,
       title: product.title,
       category: product.category,
+      selectedImageUrl: chosenImg,
       timestamp: new Date().toISOString(),
     },
   });
@@ -484,6 +577,22 @@ async function init() {
 
   // Try auto-scanning the active page
   setTimeout(scanActivePageProducts, 300);
+
+  // Listen to cross-extension selection changes from popup
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local') {
+      if (changes.activeTryOnTarget?.newValue) {
+        const target = changes.activeTryOnTarget.newValue;
+        if (target.productId) {
+          state.selectedProductId = target.productId;
+          if (target.selectedImageUrl) {
+            state.variantSelections[target.productId] = target.selectedImageUrl;
+          }
+          renderProducts();
+        }
+      }
+    }
+  });
 
   setInterval(checkBackendHealth, 15000);
 }

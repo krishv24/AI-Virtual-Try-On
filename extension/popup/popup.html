@@ -25,50 +25,77 @@
 
     <!-- Main Content -->
     <main class="content">
+      <!-- Active Profile Switcher -->
       <div class="popup-profile-row">
         <span class="profile-icon">👤</span>
-        <select id="popup-profile-select" class="popup-select">
-          <option value="" disabled selected>Loading profiles...</option>
-        </select>
+        <div class="profile-select-wrap">
+          <label for="popup-profile-select" class="sr-only">Active Profile</label>
+          <select id="popup-profile-select" class="popup-select">
+            <option value="" disabled selected>Loading profiles...</option>
+          </select>
+        </div>
+        <button id="open-profile-btn" class="mini-icon-btn" title="Open Digital Profile Studio">⚙️</button>
       </div>
 
+      <!-- Phase 5: Detected Products & Variant Handling -->
+      <section class="products-section">
+        <div class="section-bar">
+          <div class="section-title-wrap">
+            <span class="section-title">Products On This Page</span>
+            <span id="popup-product-count" class="count-pill">0</span>
+          </div>
+          <div class="section-actions">
+            <button id="popup-rescan-btn" class="icon-subtle-btn" title="Rescan active page">🔄</button>
+            <button id="popup-add-demo-btn" class="icon-subtle-btn" title="Add demo sample garments">➕</button>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="popup-empty-products" class="popup-empty-state">
+          <span class="empty-msg">No products detected on active tab</span>
+          <button id="popup-load-demo-btn" class="link-btn">+ Load Sample Apparel</button>
+        </div>
+
+        <!-- Selectable Products List with Variant Handlers -->
+        <div id="popup-product-list" class="popup-product-list hidden"></div>
+
+        <!-- Active Target Confirmation Card -->
+        <div id="active-target-card" class="active-target-card hidden">
+          <div class="target-header">
+            <span class="target-dot"></span>
+            <strong id="target-title">Product Selected</strong>
+          </div>
+          <div class="target-details">
+            <span id="target-variant-badge" class="badge-front">✨ Clearest Front Shot</span>
+            <span id="target-category-text" class="target-category">Upper Body</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Launch Studio Action -->
       <div class="hero-card">
-        <p class="description">
-          Seamlessly preview clothes on yourself directly on any e-commerce store with AI precision.
-        </p>
         <button id="open-sidepanel-btn" class="primary-btn">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
             <line x1="15" y1="3" x2="15" y2="21"></line>
           </svg>
-          Open Try-On Studio
-        </button>
-        <button id="open-profile-btn" class="secondary-btn">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-            <circle cx="12" cy="7" r="4"></circle>
-          </svg>
-          Digital Profiles & Body Setup
+          Open Try-On Studio (Side Panel)
         </button>
       </div>
 
-      <!-- Quick Info / Architecture Specs -->
+      <!-- Architecture Specs -->
       <div class="specs-card">
         <div class="spec-item">
           <span class="spec-label">Model Pipeline</span>
           <span class="spec-value highlight">CatVTON / IDM-VTON</span>
         </div>
         <div class="spec-item">
-          <span class="spec-label">Classification</span>
-          <span class="spec-value">CLIP (Open-Weight)</span>
-        </div>
-        <div class="spec-item">
-          <span class="spec-label">Pose Tracking</span>
-          <span class="spec-value">MediaPipe (Local)</span>
+          <span class="spec-label">Classification & Pose</span>
+          <span class="spec-value">CLIP & MediaPipe</span>
         </div>
       </div>
 
-      <!-- System Diagnostic -->
+      <!-- Server Diagnostic Alert -->
       <div id="server-alert" class="server-alert hidden">
         <span class="alert-icon">⚠️</span>
         <div class="alert-text">

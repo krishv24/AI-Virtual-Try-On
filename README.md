@@ -31,10 +31,10 @@ AI-Virtual-Try-On/
 │   ├── icons/               # 16px, 48px, 128px extension icons
 │   ├── content/             # Phase 4 Universal Product Detection
 │   │   └── content.js       # Priority extractors (JSON-LD, OG, Visual CTA) & Plugin Registry
-│   ├── popup/               # Extension popup UI
-│   │   ├── popup.html       # Glassmorphism popup with backend status check & Studio link
-│   │   ├── popup.css        # Modern dark-mode styling
-│   │   └── popup.js         # API health check, side panel & profile launcher
+│   ├── popup/               # Extension popup UI (Phase 5 Product Selection & Variants)
+│   │   ├── popup.html       # Selectable product list, variant angle picker & active target banner
+│   │   ├── popup.css        # Modern dark-mode styling & variant thumbnails
+│   │   └── popup.js         # Auto-front shot heuristics & chrome.storage.local sync
 │   ├── profile/             # Phase 2 Digital Profile Creation Studio
 │   │   ├── profile.html     # Multi-step profile wizard & on-screen guidance
 │   │   ├── profile.css      # Studio workspace styles & validation badges
