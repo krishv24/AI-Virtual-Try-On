@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Virtual Try-On</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -11,15 +14,21 @@
     <!-- Header -->
     <header class="header">
       <div class="brand">
-        <div class="logo-icon">✨</div>
+        <div class="logo-icon"><img src="../icons/logo.png" alt="Logo" class="logo-img"></div>
         <div class="brand-text">
           <h1>AI Virtual Try-On</h1>
           <span class="subtitle">Next-Gen Shopping Assistant</span>
         </div>
       </div>
-      <div id="backend-status-badge" class="status-badge checking" title="Checking backend status">
-        <span class="status-dot"></span>
-        <span id="backend-status-text">Checking API...</span>
+      <div class="header-right-group">
+        <button id="theme-toggle" class="theme-toggle-btn" title="Toggle dark/light mode">
+          <span class="icon-moon">🌙</span>
+          <span class="icon-sun">☀️</span>
+        </button>
+        <div id="backend-status-badge" class="status-badge checking" title="Checking backend status">
+          <span class="status-dot"></span>
+          <span id="backend-status-text">Checking API...</span>
+        </div>
       </div>
     </header>
 

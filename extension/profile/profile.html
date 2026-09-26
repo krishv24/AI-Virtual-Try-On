@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Virtual Try-On - Digital Profile Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="profile.css">
 </head>
 <body>
@@ -11,7 +14,7 @@
     <!-- Navbar -->
     <header class="navbar">
       <div class="nav-brand">
-        <div class="logo-icon">✨</div>
+        <div class="logo-icon"><img src="../icons/logo.png" alt="Logo" class="logo-img"></div>
         <div>
           <h1>AI Virtual Try-On Studio</h1>
           <span class="subtext">Digital Wardrobe & Profile Management</span>
@@ -36,6 +39,10 @@
           <span class="dot"></span>
           <span class="status-label">API Checking</span>
         </div>
+        <button id="theme-toggle" class="theme-toggle-btn" title="Toggle dark/light mode">
+          <span class="icon-moon">🌙</span>
+          <span class="icon-sun">☀️</span>
+        </button>
       </div>
     </header>
 

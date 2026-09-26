@@ -4,6 +4,23 @@
  * and saving the chosen product + image URL to chrome.storage.local.
  */
 
+/* ── Theme Toggle (dark default) ── */
+(function initTheme() {
+  chrome.storage.local.get('aivton_theme', (res) => {
+    if (res.aivton_theme === 'light') document.body.classList.add('light');
+  });
+})();
+document.addEventListener('DOMContentLoaded', () => {
+  const themeBtn = document.getElementById('theme-toggle');
+  if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+      document.body.classList.toggle('light');
+      const mode = document.body.classList.contains('light') ? 'light' : 'dark';
+      chrome.storage.local.set({ aivton_theme: mode });
+    });
+  }
+});
+
 const BACKEND_HEALTH_URL = 'http://localhost:8000/health';
 
 // Sample demo garments for immediate interactive testing

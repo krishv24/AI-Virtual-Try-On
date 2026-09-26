@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Virtual Try-On Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
@@ -11,15 +14,21 @@
     <!-- Header -->
     <header class="studio-header">
       <div class="brand">
-        <div class="logo-badge">✨</div>
+        <div class="logo-badge"><img src="../icons/logo.png" alt="Logo" class="logo-img"></div>
         <div class="brand-titles">
           <h2>AI Try-On Studio</h2>
           <span class="sub">CatVTON & MediaPipe Pipeline</span>
         </div>
       </div>
-      <div id="sp-status-badge" class="status-chip checking" title="Backend health">
-        <span class="status-dot"></span>
-        <span id="sp-status-text">Checking...</span>
+      <div class="header-right-group">
+        <button id="theme-toggle" class="theme-toggle-btn" title="Toggle dark/light mode">
+          <span class="icon-moon">🌙</span>
+          <span class="icon-sun">☀️</span>
+        </button>
+        <div id="sp-status-badge" class="status-chip checking" title="Backend health">
+          <span class="status-dot"></span>
+          <span id="sp-status-text">Checking...</span>
+        </div>
       </div>
     </header>
 
