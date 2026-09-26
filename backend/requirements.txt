@@ -1,0 +1,13 @@
+# Core Web Framework
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+python-dotenv>=1.0.1
+httpx>=0.27.0
+
+# Future Phases (Refer to techstack.txt):
+# - DB: sqlite3 (Python built-in)
+# - CLIP category classification: transformers / open_clip_torch
+# - Pose / Body landmarks: mediapipe
+# - Styling LLM: groq / google-generativeai (free tier)

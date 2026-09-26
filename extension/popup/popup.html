@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Virtual Try-On</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo-icon">✨</div>
+        <div class="brand-text">
+          <h1>AI Virtual Try-On</h1>
+          <span class="subtitle">Next-Gen Shopping Assistant</span>
+        </div>
+      </div>
+      <div id="backend-status-badge" class="status-badge checking" title="Checking backend status">
+        <span class="status-dot"></span>
+        <span id="backend-status-text">Checking API...</span>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="content">
+      <div class="hero-card">
+        <p class="description">
+          Seamlessly preview clothes on yourself directly on any e-commerce store with AI precision.
+        </p>
+        <button id="open-sidepanel-btn" class="primary-btn">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="15" y1="3" x2="15" y2="21"></line>
+          </svg>
+          Open Try-On Studio
+        </button>
+      </div>
+
+      <!-- Quick Info / Architecture Specs -->
+      <div class="specs-card">
+        <div class="spec-item">
+          <span class="spec-label">Model Pipeline</span>
+          <span class="spec-value highlight">CatVTON / IDM-VTON</span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Classification</span>
+          <span class="spec-value">CLIP (Open-Weight)</span>
+        </div>
+        <div class="spec-item">
+          <span class="spec-label">Pose Tracking</span>
+          <span class="spec-value">MediaPipe (Local)</span>
+        </div>
+      </div>
+
+      <!-- System Diagnostic -->
+      <div id="server-alert" class="server-alert hidden">
+        <span class="alert-icon">⚠️</span>
+        <div class="alert-text">
+          <strong>Backend Offline</strong>
+          <span>Start backend: <code>uvicorn app.main:app --reload</code></span>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span class="version">v1.0.0</span>
+      <button id="recheck-btn" class="icon-btn" title="Refresh Health Check">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+      </button>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
