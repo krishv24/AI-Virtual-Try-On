@@ -606,12 +606,55 @@ body {
   position: absolute;
   bottom: 8px;
   right: 8px;
-  background: rgba(16, 185, 129, 0.85);
+  background: rgba(16, 185, 129, 0.88);
+  backdrop-filter: blur(6px);
   color: #fff;
   padding: 3px 8px;
   border-radius: 6px;
   font-size: 10px;
   font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.comparison-badge.low-conf {
+  background: rgba(239, 68, 68, 0.88);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+}
+
+.accuracy-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #fca5a5;
+  animation: fadeIn 0.25s ease;
+}
+
+.warning-badge-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.warning-text-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.warning-title-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f87171;
+}
+
+.warning-desc-text {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.35;
 }
 
 .result-meta-row {

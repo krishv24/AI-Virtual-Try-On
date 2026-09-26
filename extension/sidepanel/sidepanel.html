@@ -165,8 +165,18 @@
           <div id="results-content" class="results-content hidden">
             <div class="result-image-box">
               <img id="result-img" src="" alt="Virtual Try-On Output">
-              <div class="comparison-badge" id="comparison-badge">AI Drape Match: 98%</div>
+              <div class="comparison-badge" id="comparison-badge">Fidelity: 96%</div>
             </div>
+
+            <!-- Phase 9 Low Confidence Warning Banner -->
+            <div id="low-confidence-banner" class="accuracy-warning-banner hidden">
+              <span class="warning-badge-icon">⚠️</span>
+              <div class="warning-text-box">
+                <div class="warning-title-text">Low Confidence Result</div>
+                <div id="low-confidence-reason" class="warning-desc-text">Color or pattern deviation detected from original product.</div>
+              </div>
+            </div>
+
             <div class="result-meta-row">
               <span id="result-garment-title" class="result-title">Sample Garment</span>
               <span id="result-category-tag" class="category-pill">Upper Body</span>

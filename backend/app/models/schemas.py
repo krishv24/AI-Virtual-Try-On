@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 class PhotoType(str, Enum):
@@ -78,6 +78,9 @@ class TryOnResultResponse(BaseModel):
     product_id: Optional[int] = None
     category: str
     handler_name: Optional[str] = None
+    accuracy_score: Optional[float] = 1.0
+    is_low_confidence: bool = False
+    accuracy_metrics: Optional[Dict[str, Any]] = None
     created_at: str
     access_url: str
 

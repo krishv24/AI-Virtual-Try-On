@@ -88,11 +88,26 @@ def init_db():
                 product_id INTEGER,
                 category TEXT NOT NULL,
                 image_path TEXT NOT NULL,
+                accuracy_score REAL DEFAULT 1.0,
+                is_low_confidence INTEGER DEFAULT 0,
+                accuracy_metrics TEXT,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
                 FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
             );
         """)
+
+        # Phase 9 Safe Migrations for existing databases
+        for col_def in [
+            "accuracy_score REAL DEFAULT 1.0",
+            "is_low_confidence INTEGER DEFAULT 0",
+            "accuracy_metrics TEXT",
+        ]:
+            col_name = col_def.split()[0]
+            try:
+                cursor.execute(f"ALTER TABLE tryon_results ADD COLUMN {col_def};")
+            except sqlite3.OperationalError:
+                pass
 
         # Indexing for high-performance lookup
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_photos_profile_id ON profile_photos(profile_id);")

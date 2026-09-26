@@ -19,9 +19,11 @@ from app.models.schemas import (
     TryOnResultResponse,
     TryOnStatusResponse,
 )
+from app.services.accuracy_validator import accuracy_validator
 from app.services.catvton_service import catvton_service
 from app.services.clip_classifier import clip_classifier
 from app.services.tryon_router import tryon_router_registry
+import json
 
 router = APIRouter(prefix="/api/tryon", tags=["Virtual Try-On"])
 
@@ -139,24 +141,40 @@ async def create_tryon(
             conn=conn,
         )
 
-        # 6. Save final composited result to private storage
+        # 6. Phase 9 Accuracy Safeguards: validate color and pattern fidelity
+        accuracy_data = accuracy_validator.validate_accuracy(
+            original_garment_input=garment_path,
+            composited_result_input=composited_temp_path,
+            category=effective_category,
+        )
+        accuracy_score = accuracy_data["accuracy_score"]
+        is_low_conf = 1 if accuracy_data["is_low_confidence"] else 0
+        metrics_json = json.dumps(accuracy_data)
+
+        # 7. Save final composited result to private storage
         result_filename = f"tryon_{uuid4().hex}.png"
         final_storage_path = settings.STORAGE_DIR / result_filename
         shutil.copy(composited_temp_path, final_storage_path)
 
-        # 7. Insert into SQLite tryon_results table
+        # 8. Insert into SQLite tryon_results table with accuracy metrics
         created_at = datetime.now(timezone.utc).isoformat()
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT INTO tryon_results (profile_id, product_id, category, image_path, created_at)
-            VALUES (?, ?, ?, ?, ?);
+            INSERT INTO tryon_results (
+                profile_id, product_id, category, image_path,
+                accuracy_score, is_low_confidence, accuracy_metrics, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 request.profile_id,
                 request.product_id,
                 effective_category,
                 str(final_storage_path),
+                accuracy_score,
+                is_low_conf,
+                metrics_json,
                 created_at,
             ),
         )
@@ -168,6 +186,9 @@ async def create_tryon(
             product_id=request.product_id,
             category=effective_category,
             handler_name=handler.name,
+            accuracy_score=accuracy_score,
+            is_low_confidence=bool(is_low_conf),
+            accuracy_metrics=accuracy_data,
             created_at=created_at,
             access_url=f"/api/tryon/results/{result_id}/file",
         )
@@ -179,11 +200,15 @@ async def create_tryon(
 @router.get("/results/{result_id}", response_model=TryOnResultResponse)
 def get_tryon_result(result_id: int, conn: sqlite3.Connection = Depends(get_db)):
     """
-    Retrieve metadata for a specific try-on result.
+    Retrieve metadata for a specific try-on result including accuracy metrics.
     """
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, profile_id, product_id, category, created_at FROM tryon_results WHERE id = ?;",
+        """
+        SELECT id, profile_id, product_id, category, accuracy_score, is_low_confidence, accuracy_metrics, created_at
+        FROM tryon_results
+        WHERE id = ?;
+        """,
         (result_id,),
     )
     row = cursor.fetchone()
@@ -193,12 +218,22 @@ def get_tryon_result(result_id: int, conn: sqlite3.Connection = Depends(get_db))
     # Match handler name for introspection
     handler = tryon_router_registry.get_handler(row["category"])
 
+    metrics_obj = None
+    if "accuracy_metrics" in row.keys() and row["accuracy_metrics"]:
+        try:
+            metrics_obj = json.loads(row["accuracy_metrics"])
+        except Exception:
+            metrics_obj = None
+
     return TryOnResultResponse(
         id=row["id"],
         profile_id=row["profile_id"],
         product_id=row["product_id"],
         category=row["category"],
         handler_name=handler.name,
+        accuracy_score=row["accuracy_score"] if "accuracy_score" in row.keys() else 1.0,
+        is_low_confidence=bool(row["is_low_confidence"]) if "is_low_confidence" in row.keys() else False,
+        accuracy_metrics=metrics_obj,
         created_at=row["created_at"],
         access_url=f"/api/tryon/results/{row['id']}/file",
     )
@@ -237,7 +272,7 @@ def get_profile_tryon_history(profile_id: int, conn: sqlite3.Connection = Depend
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT id, profile_id, product_id, category, created_at
+        SELECT id, profile_id, product_id, category, accuracy_score, is_low_confidence, accuracy_metrics, created_at
         FROM tryon_results
         WHERE profile_id = ?
         ORDER BY id DESC;
@@ -245,15 +280,26 @@ def get_profile_tryon_history(profile_id: int, conn: sqlite3.Connection = Depend
         (profile_id,),
     )
     rows = cursor.fetchall()
-    return [
-        TryOnResultResponse(
-            id=row["id"],
-            profile_id=row["profile_id"],
-            product_id=row["product_id"],
-            category=row["category"],
-            handler_name=tryon_router_registry.get_handler(row["category"]).name,
-            created_at=row["created_at"],
-            access_url=f"/api/tryon/results/{row['id']}/file",
+    results = []
+    for row in rows:
+        metrics_obj = None
+        if "accuracy_metrics" in row.keys() and row["accuracy_metrics"]:
+            try:
+                metrics_obj = json.loads(row["accuracy_metrics"])
+            except Exception:
+                metrics_obj = None
+        results.append(
+            TryOnResultResponse(
+                id=row["id"],
+                profile_id=row["profile_id"],
+                product_id=row["product_id"],
+                category=row["category"],
+                handler_name=tryon_router_registry.get_handler(row["category"]).name,
+                accuracy_score=row["accuracy_score"] if "accuracy_score" in row.keys() else 1.0,
+                is_low_confidence=bool(row["is_low_confidence"]) if "is_low_confidence" in row.keys() else False,
+                accuracy_metrics=metrics_obj,
+                created_at=row["created_at"],
+                access_url=f"/api/tryon/results/{row['id']}/file",
+            )
         )
-        for row in rows
-    ]
+    return results

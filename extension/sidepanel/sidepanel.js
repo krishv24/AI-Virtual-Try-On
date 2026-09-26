@@ -80,6 +80,9 @@ const resultGarmentTitle = document.getElementById('result-garment-title');
 const resultCategoryTag = document.getElementById('result-category-tag');
 const resetResultBtn = document.getElementById('reset-result-btn');
 const downloadResultBtn = document.getElementById('download-result-btn');
+const comparisonBadge = document.getElementById('comparison-badge');
+const lowConfidenceBanner = document.getElementById('low-confidence-banner');
+const lowConfidenceReason = document.getElementById('low-confidence-reason');
 
 // --- 1. Lightweight Storage Sync Helpers ---
 
@@ -494,6 +497,32 @@ function showResultView(product, tryonResult = null) {
   const displayCat = (tryonResult && tryonResult.category) ? tryonResult.category : (product.category || 'Apparel');
   resultCategoryTag.textContent = displayCat;
 
+  // Phase 9 Product Accuracy Safeguards: flag low confidence
+  if (tryonResult && tryonResult.is_low_confidence) {
+    if (lowConfidenceBanner) {
+      lowConfidenceBanner.classList.remove('hidden');
+      if (lowConfidenceReason) {
+        lowConfidenceReason.textContent =
+          tryonResult.accuracy_metrics?.flag_reason ||
+          'Color or pattern deviation detected from original product.';
+      }
+    }
+    if (comparisonBadge) {
+      const scorePct = Math.round((tryonResult.accuracy_score || 0.4) * 100);
+      comparisonBadge.textContent = `Fidelity: ${scorePct}% (Low Confidence)`;
+      comparisonBadge.classList.add('low-conf');
+    }
+  } else {
+    if (lowConfidenceBanner) {
+      lowConfidenceBanner.classList.add('hidden');
+    }
+    if (comparisonBadge) {
+      const scorePct = Math.round((tryonResult?.accuracy_score || 0.95) * 100);
+      comparisonBadge.textContent = `Fidelity: ${scorePct}%`;
+      comparisonBadge.classList.remove('low-conf');
+    }
+  }
+
   // Persist try-on result record (metadata only)
   setStoredState({
     lastResult: {
@@ -503,6 +532,8 @@ function showResultView(product, tryonResult = null) {
       selectedImageUrl: chosenImg,
       resultAccessUrl: tryonResult ? tryonResult.access_url : null,
       handlerName: tryonResult ? tryonResult.handler_name : null,
+      accuracyScore: tryonResult ? tryonResult.accuracy_score : null,
+      isLowConfidence: tryonResult ? tryonResult.is_low_confidence : false,
       timestamp: new Date().toISOString(),
     },
   });
@@ -513,6 +544,8 @@ function resetResultView() {
   resultsContent.classList.add('hidden');
   resultsActions.classList.add('hidden');
   resultImg.src = '';
+  if (lowConfidenceBanner) lowConfidenceBanner.classList.add('hidden');
+  if (comparisonBadge) comparisonBadge.classList.remove('low-conf');
   setStoredState({ lastResult: null });
 }
 
