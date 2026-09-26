@@ -372,6 +372,7 @@ function renderProducts() {
       state.variantSelections[prod.id] = autoFrontShot || images[0];
     }
 
+    const currentImg = state.variantSelections[prod.id] || images[0] || '';
     const isSelected = state.selectedProductId === prod.id;
     const isStaged = isStagedForCompare(prod.id);
 
@@ -689,7 +690,7 @@ async function handleTryOnExecution(forceRefresh = false) {
       'No Apparel Detected',
       'No clothing products have been detected on this page yet. Please browse an apparel store or tap the "+" button above to add our sample demo garment.',
       '➕ Add Demo Garment',
-      addDemoProduct
+      addDemoGarments
     );
     return;
   }
