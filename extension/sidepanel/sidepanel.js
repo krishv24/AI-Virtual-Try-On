@@ -414,12 +414,44 @@ angleChips.querySelectorAll('.angle-chip').forEach((chip) => {
   });
 });
 
-scanPageBtn.addEventListener('click', () => {
-  // Will connect to content script scraper in future phases; for now show animated rescan
+async function scanActivePageProducts() {
   productCountBadge.textContent = '...';
-  setTimeout(() => renderProducts(), 400);
-});
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id) {
+      renderProducts();
+      return;
+    }
 
+    // Don't scan internal chrome:// pages
+    if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://'))) {
+      renderProducts();
+      return;
+    }
+
+    chrome.tabs.sendMessage(tab.id, { type: 'DETECT_PRODUCTS' }, (response) => {
+      if (chrome.runtime.lastError) {
+        // Content script might not be injected yet or tab restricted
+        console.log('[AI Try-On] Content script message error:', chrome.runtime.lastError.message);
+        renderProducts();
+        return;
+      }
+
+      if (response && response.success && Array.isArray(response.products) && response.products.length > 0) {
+        state.products = response.products;
+        setStoredState({ storedProducts: state.products });
+        renderProducts();
+      } else {
+        renderProducts();
+      }
+    });
+  } catch (err) {
+    console.warn('[AI Try-On] Error querying active tab:', err);
+    renderProducts();
+  }
+}
+
+scanPageBtn.addEventListener('click', scanActivePageProducts);
 addDemoProductBtn.addEventListener('click', addDemoGarments);
 tryonBtn.addEventListener('click', handleTryOnExecution);
 resetResultBtn.addEventListener('click', resetResultView);
@@ -449,6 +481,9 @@ async function init() {
 
   await loadProfiles();
   renderProducts();
+
+  // Try auto-scanning the active page
+  setTimeout(scanActivePageProducts, 300);
 
   setInterval(checkBackendHealth, 15000);
 }

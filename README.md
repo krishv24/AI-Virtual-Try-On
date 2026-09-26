@@ -26,9 +26,11 @@ AI-Virtual-Try-On/
 ├── README.md                # Project documentation & quickstart
 ├── techstack.txt            # Architecture & tech stack specifications
 ├── extension/               # Chrome Manifest V3 Extension
-│   ├── manifest.json        # MV3 manifest with popup and side panel support
+│   ├── manifest.json        # MV3 manifest with popup, side panel & content scripts
 │   ├── background.js        # Service worker for panel & lifecycle events
 │   ├── icons/               # 16px, 48px, 128px extension icons
+│   ├── content/             # Phase 4 Universal Product Detection
+│   │   └── content.js       # Priority extractors (JSON-LD, OG, Visual CTA) & Plugin Registry
 │   ├── popup/               # Extension popup UI
 │   │   ├── popup.html       # Glassmorphism popup with backend status check & Studio link
 │   │   ├── popup.css        # Modern dark-mode styling
@@ -47,7 +49,8 @@ AI-Virtual-Try-On/
     ├── tryon.db             # SQLite database (auto-generated on startup)
     ├── tests/               # Backend tests
     │   ├── test_phase1.py   # Test suite for CRUD & storage
-    │   └── test_phase2.py   # Test suite for MediaPipe validation & multi-profile
+    │   ├── test_phase2.py   # Test suite for MediaPipe validation & multi-profile
+    │   └── test_phase4.py   # Test suite for product registration & catalog
     └── app/
         ├── __init__.py      # Package indicator
         ├── config.py        # Settings loader with private STORAGE_DIR
@@ -59,7 +62,8 @@ AI-Virtual-Try-On/
         ├── routers/         # API Routers
         │   ├── __init__.py
         │   ├── profiles.py  # Profiles CRUD + MediaPipe validated uploads
-        │   └── photos.py    # Private photo file streaming & deletion
+        │   ├── photos.py    # Private photo file streaming & deletion
+        │   └── products.py  # Product registration & lookup
         └── services/        # AI & Computer Vision Services
             ├── __init__.py
             └── mediapipe_validator.py  # MediaPipe Pose & Face landmark verifier
