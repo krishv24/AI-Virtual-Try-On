@@ -1,15 +1,30 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Dict, Any
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
 from app.config import settings
+from app.database import init_db
+from app.routers import profiles_router, photos_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: initialize database tables on startup."""
+    init_db()
+    yield
+
+# Ensure tables exist immediately upon import
+init_db()
 
 app = FastAPI(
     title="AI Virtual Try-On API",
     description="Backend API for AI Virtual Try-On Chrome Extension using CatVTON, CLIP, and MediaPipe.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Configure CORS for Chrome Extension and local development
@@ -20,6 +35,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register API Routers
+app.include_router(profiles_router)
+app.include_router(photos_router)
 
 
 class HealthResponse(BaseModel):

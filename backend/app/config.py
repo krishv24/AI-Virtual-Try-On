@@ -1,10 +1,9 @@
 from typing import List
 from pydantic_settings import BaseSettings
-from pydantic import Field
-import os
 from pathlib import Path
+import os
 
-# Locate backend root for .env
+# Locate backend root
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
@@ -16,9 +15,13 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["*"]
     
     # Database
-    DATABASE_URL: str = "sqlite:///./tryon.db"
+    DATABASE_URL: str = f"sqlite:///{BASE_DIR / 'tryon.db'}"
+    DB_PATH: Path = BASE_DIR / "tryon.db"
     
-    # AI Models (Free tiers)
+    # Private storage directory for photos (NEVER exposed publicly as static files)
+    STORAGE_DIR: Path = BASE_DIR / "storage" / "private_uploads"
+    
+    # AI Models (Free tiers from techstack.txt)
     HF_TOKEN: str = ""
     HF_CATVTON_SPACE_URL: str = ""
     GROQ_API_KEY: str = ""
@@ -30,3 +33,6 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 settings = Settings()
+
+# Ensure private storage directory exists
+settings.STORAGE_DIR.mkdir(parents=True, exist_ok=True)

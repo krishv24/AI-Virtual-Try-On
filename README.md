@@ -40,11 +40,34 @@ AI-Virtual-Try-On/
 └── backend/                 # Python FastAPI Backend
     ├── .env.example         # Environment template (keys, model endpoints)
     ├── requirements.txt     # Python backend dependencies
+    ├── tryon.db             # SQLite database (auto-generated on startup)
+    ├── tests/               # Backend tests
+    │   └── test_phase1.py   # Automated test suite for CRUD & storage
     └── app/
         ├── __init__.py      # Package indicator
-        ├── config.py        # Settings loader with pydantic-settings
-        └── main.py          # FastAPI app with CORS & /health endpoint
+        ├── config.py        # Settings loader with private STORAGE_DIR
+        ├── database.py      # SQLite connection & Phase 1 schema DDL
+        ├── main.py          # FastAPI app with CORS & lifespan DB init
+        ├── models/          # Pydantic schemas (profiles, photos, products)
+        │   ├── __init__.py
+        │   └── schemas.py
+        └── routers/         # API Routers
+            ├── __init__.py
+            ├── profiles.py  # Profiles CRUD + Photo upload endpoints
+            └── photos.py    # Private photo file streaming & deletion
 ```
+
+---
+
+## 🗄️ Database Schema (SQLite)
+
+- **`profiles`**: `id`, `name`, `created_at`
+- **`profile_photos`**: `id`, `profile_id` (FK CASCADE), `photo_type` (`front_full_body`, `upper_body`, `legs`, `feet`, `face`), `file_path`, `created_at`
+- **`products`**: `id`, `source_url`, `title`, `image_urls`, `category`, `price`, `detected_at`
+- **`tryon_results`**: `id`, `profile_id` (FK CASCADE), `product_id` (FK SET NULL), `category`, `image_path`, `created_at`
+
+### 🔒 Storage Security Model
+User photos are stored on local disk under `backend/storage/private_uploads/`. This directory is **never mounted or exposed publicly as a static web path**. Files can only be retrieved through the controlled `/api/photos/{photo_id}/file` endpoint or consumed internally by AI inference pipelines.
 
 ---
 

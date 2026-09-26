@@ -28,10 +28,12 @@ env/
 .env
 *.env.local
 
-# Databases
+# Databases & Storage
 *.db
 *.sqlite
 *.sqlite3
+storage/
+backend/storage/
 
 # Logs & Temporary files
 *.log
