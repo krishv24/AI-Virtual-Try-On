@@ -133,6 +133,35 @@ body {
   gap: 12px;
 }
 
+.popup-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.profile-icon {
+  font-size: 14px;
+}
+
+.popup-select {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.popup-select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 .hero-card {
   background: var(--bg-card);
   backdrop-filter: blur(10px);

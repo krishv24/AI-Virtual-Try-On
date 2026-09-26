@@ -75,9 +75,56 @@ async function openSidePanel() {
   }
 }
 
+const popupProfileSelect = document.getElementById('popup-profile-select');
+
+async function loadPopupProfiles() {
+  try {
+    const res = await fetch('http://localhost:8000/api/profiles');
+    if (!res.ok) return;
+    const profiles = await res.json();
+
+    popupProfileSelect.innerHTML = '';
+    if (profiles.length === 0) {
+      popupProfileSelect.innerHTML = '<option value="" disabled selected>No profiles found</option>';
+      return;
+    }
+
+    profiles.forEach((p) => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${p.name} (${p.photo_count || 0}/5)`;
+      popupProfileSelect.appendChild(opt);
+    });
+
+    // Check stored activeProfileId
+    chrome.storage.local.get(['activeProfileId'], (result) => {
+      if (result && result.activeProfileId) {
+        popupProfileSelect.value = result.activeProfileId;
+      } else if (profiles.length > 0) {
+        popupProfileSelect.value = profiles[0].id;
+        chrome.storage.local.set({ activeProfileId: profiles[0].id });
+      }
+    });
+  } catch (e) {
+    console.warn('[AI Try-On] Error fetching popup profiles:', e);
+  }
+}
+
+if (popupProfileSelect) {
+  popupProfileSelect.addEventListener('change', (e) => {
+    const id = Number(e.target.value);
+    if (id) {
+      chrome.storage.local.set({ activeProfileId: id });
+    }
+  });
+}
+
 // Event Listeners
 openSidepanelBtn.addEventListener('click', openSidePanel);
-recheckBtn.addEventListener('click', checkBackendHealth);
+recheckBtn.addEventListener('click', () => {
+  checkBackendHealth();
+  loadPopupProfiles();
+});
 
 const openProfileBtn = document.getElementById('open-profile-btn');
 if (openProfileBtn) {
@@ -87,4 +134,7 @@ if (openProfileBtn) {
 }
 
 // Initialize on popup load
-document.addEventListener('DOMContentLoaded', checkBackendHealth);
+document.addEventListener('DOMContentLoaded', () => {
+  checkBackendHealth();
+  loadPopupProfiles();
+});

@@ -37,10 +37,10 @@ AI-Virtual-Try-On/
 │   │   ├── profile.html     # Multi-step profile wizard & on-screen guidance
 │   │   ├── profile.css      # Studio workspace styles & validation badges
 │   │   └── profile.js       # MediaPipe upload feedback & multi-profile manager
-│   └── sidepanel/           # Chrome side panel workstation
-│       ├── sidepanel.html   # Model & garment upload + profile switcher
-│       ├── sidepanel.css    # Responsive side panel layout & controls
-│       └── sidepanel.js     # Side panel state & backend connector
+│   └── sidepanel/           # Chrome side panel workstation (Phase 3 UI Shell)
+│       ├── sidepanel.html   # Shell with profile switcher, products on page, feedback & results
+│       ├── sidepanel.css    # Responsive workstation styles & animations
+│       └── sidepanel.js     # chrome.storage.local sync, product selection, pipeline feedback
 └── backend/                 # Python FastAPI Backend
     ├── .env.example         # Environment template (keys, model endpoints)
     ├── requirements.txt     # Python backend dependencies

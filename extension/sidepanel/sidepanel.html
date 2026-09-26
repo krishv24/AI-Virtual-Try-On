@@ -13,8 +13,8 @@
       <div class="brand">
         <div class="logo-badge">✨</div>
         <div class="brand-titles">
-          <h2>Try-On Studio</h2>
-          <span class="sub">CatVTON & IDM-VTON Pipeline</span>
+          <h2>AI Try-On Studio</h2>
+          <span class="sub">CatVTON & MediaPipe Pipeline</span>
         </div>
       </div>
       <div id="sp-status-badge" class="status-chip checking" title="Backend health">
@@ -25,83 +25,158 @@
 
     <!-- Content Workspace -->
     <main class="studio-body">
-      <!-- Profile Selection Bar -->
-      <div class="profile-bar">
-        <div class="profile-bar-left">
-          <span class="profile-label">Profile:</span>
-          <select id="sp-profile-select" class="sp-select">
-            <option value="">Loading...</option>
+      <!-- 1. Profile Switcher Bar -->
+      <section class="panel-card profile-card">
+        <div class="card-header">
+          <div class="header-left">
+            <span class="section-icon">👤</span>
+            <span class="card-title">Digital Profile</span>
+          </div>
+          <button id="sp-manage-profiles-btn" class="text-btn" title="Open Profile Studio">
+            + Manage
+          </button>
+        </div>
+
+        <div class="profile-control-row">
+          <select id="sp-profile-select" class="sp-dropdown">
+            <option value="" disabled selected>Loading profiles...</option>
           </select>
         </div>
-        <button id="sp-manage-profiles-btn" class="sp-btn-link" title="Open Digital Profile Studio">
-          Manage ⚙️
-        </button>
-      </div>
 
-      <!-- Section 1: User Reference Body Photo -->
-      <section class="studio-section">
-        <div class="section-title">
-          <span class="step-num">1</span>
-          <h3>Your Photo (Reference Model)</h3>
-        </div>
-        <div class="drop-zone" id="user-photo-zone">
-          <div class="zone-placeholder">
-            <svg class="zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-              <circle cx="12" cy="7" r="4"></circle>
-            </svg>
-            <p>Upload full-body or upper-body photo</p>
-            <span class="hint">MediaPipe checks landmarks automatically</span>
+        <!-- Active Model Preview & Angle Tabs -->
+        <div class="model-preview-box" id="model-preview-box">
+          <div id="model-img-wrapper" class="model-img-wrapper">
+            <div id="model-empty-state" class="model-empty-state">
+              <span>No model photo selected</span>
+              <button id="sp-go-upload-btn" class="tiny-btn">Open Studio to Upload</button>
+            </div>
+            <img id="active-model-img" src="" alt="Active Model" class="hidden">
           </div>
-          <input type="file" id="user-photo-input" accept="image/png, image/jpeg, image/webp" class="file-input">
+          <div class="angle-chips" id="angle-chips">
+            <button class="angle-chip active" data-angle="front_full_body">Full Body</button>
+            <button class="angle-chip" data-angle="upper_body">Upper</button>
+            <button class="angle-chip" data-angle="legs">Lower</button>
+          </div>
         </div>
       </section>
 
-      <!-- Section 2: Garment to Try-On -->
-      <section class="studio-section">
-        <div class="section-title">
-          <span class="step-num">2</span>
-          <h3>Garment to Try On</h3>
+      <!-- 2. Products on this Page -->
+      <section class="panel-card products-card">
+        <div class="card-header">
+          <div class="header-left">
+            <span class="section-icon">🛍️</span>
+            <span class="card-title">Products on this page</span>
+            <span id="product-count-badge" class="count-badge">0</span>
+          </div>
+          <div class="header-actions">
+            <button id="scan-page-btn" class="icon-action-btn" title="Rescan page for apparel">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+              </svg>
+            </button>
+            <button id="add-demo-product-btn" class="icon-action-btn" title="Add demo sample garment">
+              ➕
+            </button>
+          </div>
         </div>
-        <div class="garment-card">
-          <div class="drop-zone" id="garment-photo-zone">
-            <div class="zone-placeholder">
-              <svg class="zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+
+        <!-- Product List & Empty State Container -->
+        <div class="products-viewport" id="products-viewport">
+          <!-- Empty State -->
+          <div id="products-empty-state" class="empty-state-view">
+            <div class="empty-icon-circle">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8">
                 <path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"></path>
               </svg>
-              <p>Select garment from current page or upload</p>
-              <span class="hint">CLIP categorizes Upper, Lower, or Dress</span>
             </div>
-            <input type="file" id="garment-photo-input" accept="image/png, image/jpeg, image/webp" class="file-input">
+            <h4>No clothing detected yet</h4>
+            <p>Browse any apparel store or tap <strong>+</strong> above to load a demo sample garment.</p>
           </div>
+
+          <!-- Product Card Grid -->
+          <div id="products-grid" class="products-grid hidden"></div>
         </div>
       </section>
 
-      <!-- Section 3: Try-On Execution & Results -->
-      <section class="studio-section">
-        <div class="section-title">
-          <span class="step-num">3</span>
-          <h3>Virtual Try-On Result</h3>
+      <!-- 3. Try On Action & Processing Feedback Area -->
+      <section class="action-card">
+        <button id="tryon-btn" class="execute-btn" disabled>
+          <span class="btn-sparkle">✨</span>
+          <span id="tryon-btn-text">Select a product to Try On</span>
+        </button>
+
+        <!-- Status Area for Processing Feedback -->
+        <div id="processing-status-area" class="processing-status-area hidden">
+          <div class="processing-header">
+            <div class="spinner-small"></div>
+            <strong id="processing-main-status">Synthesizing drape...</strong>
+          </div>
+
+          <div class="pipeline-stages">
+            <div class="stage-step" id="stage-clip">
+              <span class="stage-indicator">1</span>
+              <span>CLIP Classification</span>
+            </div>
+            <div class="stage-step" id="stage-pose">
+              <span class="stage-indicator">2</span>
+              <span>MediaPipe Pose</span>
+            </div>
+            <div class="stage-step" id="stage-vton">
+              <span class="stage-indicator">3</span>
+              <span>CatVTON Drape</span>
+            </div>
+          </div>
+
+          <div class="progress-bar-wrap">
+            <div id="pipeline-progress-fill" class="progress-fill-bar" style="width: 20%;"></div>
+          </div>
+          <span id="processing-detail-text" class="processing-subtext">Initializing pipeline...</span>
         </div>
-        <div class="result-viewport" id="result-viewport">
-          <div class="viewport-placeholder">
-            <svg class="viewport-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <circle cx="8.5" cy="8.5" r="1.5"></circle>
-              <polyline points="21 15 16 10 5 21"></polyline>
-            </svg>
-            <p>Ready to generate try-on</p>
-            <span class="hint">ZeroGPU Hugging Face inference pipeline</span>
+      </section>
+
+      <!-- 4. Results View -->
+      <section class="panel-card results-card">
+        <div class="card-header">
+          <div class="header-left">
+            <span class="section-icon">👗</span>
+            <span class="card-title">Results View</span>
+          </div>
+          <div id="results-actions" class="header-actions hidden">
+            <button id="reset-result-btn" class="text-btn">Reset</button>
+            <button id="download-result-btn" class="text-btn highlight">Download</button>
           </div>
         </div>
 
-        <button id="tryon-btn" class="execute-btn" disabled>
-          <span class="btn-text">Generate Virtual Try-On</span>
-        </button>
+        <div class="results-viewport" id="results-viewport">
+          <!-- Empty State -->
+          <div id="results-empty-state" class="empty-state-view">
+            <div class="empty-icon-circle">
+              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+            </div>
+            <h4>No Try-On Generated Yet</h4>
+            <p>Pick a garment above and click "Try On" to generate your virtual fitting.</p>
+          </div>
+
+          <!-- Active Result Content -->
+          <div id="results-content" class="results-content hidden">
+            <div class="result-image-box">
+              <img id="result-img" src="" alt="Virtual Try-On Output">
+              <div class="comparison-badge" id="comparison-badge">AI Drape Match: 98%</div>
+            </div>
+            <div class="result-meta-row">
+              <span id="result-garment-title" class="result-title">Sample Garment</span>
+              <span id="result-category-tag" class="category-pill">Upper Body</span>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 
-    <!-- Bottom Notice -->
+    <!-- Footer Notice -->
     <footer class="studio-footer">
       <div class="pipeline-badge">
         <span class="pipeline-item">CLIP</span>
@@ -110,7 +185,7 @@
         <span class="pipeline-sep">→</span>
         <span class="pipeline-item">CatVTON</span>
       </div>
-      <p class="privacy-note">Zero API keys in extension. All AI processing handled via secure backend.</p>
+      <p class="privacy-note">Zero API keys in extension. Lightweight state in chrome.storage.local.</p>
     </footer>
   </div>
 

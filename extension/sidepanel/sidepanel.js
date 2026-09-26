@@ -1,61 +1,117 @@
 /**
- * AI Virtual Try-On - Side Panel Studio Controller
- * Handles user interactions, profiles, and communication with backend.
+ * AI Virtual Try-On - Side Panel Studio Controller (Phase 3 Shell)
+ * Manages Profile Switcher, Products on this page, Try-On processing, and Results View.
+ * Uses chrome.storage.local for lightweight state only (never storing photo blobs).
  */
 
 const BACKEND_BASE = 'http://localhost:8000';
 
+// Default mock products for initial testing / demo empty state
+const DEMO_GARMENTS = [
+  {
+    id: 'prod_hoodie_01',
+    title: 'Oversized Streetwear Hoodie',
+    category: 'Upper Body',
+    price: '$58.00',
+    imageUrl: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=400&auto=format&fit=crop&q=80',
+    sourceUrl: 'https://example.com/demo-hoodie',
+  },
+  {
+    id: 'prod_jacket_02',
+    title: 'Classic Denim Trucker Jacket',
+    category: 'Upper Body',
+    price: '$79.99',
+    imageUrl: 'https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=400&auto=format&fit=crop&q=80',
+    sourceUrl: 'https://example.com/demo-denim',
+  },
+  {
+    id: 'prod_pants_03',
+    title: 'Pleated Wide-Leg Trousers',
+    category: 'Lower Body',
+    price: '$64.50',
+    imageUrl: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=400&auto=format&fit=crop&q=80',
+    sourceUrl: 'https://example.com/demo-pants',
+  }
+];
+
+// App State
+let state = {
+  profiles: [],
+  activeProfileId: null,
+  activeProfileData: null,
+  activeAngle: 'front_full_body',
+  activeModelPhotoUrl: null,
+  products: [],
+  selectedProductId: null,
+  isProcessing: false,
+};
+
+// DOM References
 const spStatusBadge = document.getElementById('sp-status-badge');
 const spStatusText = document.getElementById('sp-status-text');
 const spProfileSelect = document.getElementById('sp-profile-select');
 const spManageProfilesBtn = document.getElementById('sp-manage-profiles-btn');
-const userPhotoInput = document.getElementById('user-photo-input');
-const userPhotoZone = document.getElementById('user-photo-zone');
-const garmentPhotoInput = document.getElementById('garment-photo-input');
-const garmentPhotoZone = document.getElementById('garment-photo-zone');
+const spGoUploadBtn = document.getElementById('sp-go-upload-btn');
+const activeModelImg = document.getElementById('active-model-img');
+const modelEmptyState = document.getElementById('model-empty-state');
+const angleChips = document.getElementById('angle-chips');
+
+const productCountBadge = document.getElementById('product-count-badge');
+const scanPageBtn = document.getElementById('scan-page-btn');
+const addDemoProductBtn = document.getElementById('add-demo-product-btn');
+const productsEmptyState = document.getElementById('products-empty-state');
+const productsGrid = document.getElementById('products-grid');
+
 const tryonBtn = document.getElementById('tryon-btn');
+const tryonBtnText = document.getElementById('tryon-btn-text');
+const processingStatusArea = document.getElementById('processing-status-area');
+const processingMainStatus = document.getElementById('processing-main-status');
+const processingDetailText = document.getElementById('processing-detail-text');
+const pipelineProgressFill = document.getElementById('pipeline-progress-fill');
+const stageClip = document.getElementById('stage-clip');
+const stagePose = document.getElementById('stage-pose');
+const stageVton = document.getElementById('stage-vton');
 
-let state = {
-  profiles: [],
-  activeProfileId: null,
-  userImage: null,
-  garmentImage: null,
-  backendConnected: false,
-};
+const resultsEmptyState = document.getElementById('results-empty-state');
+const resultsContent = document.getElementById('results-content');
+const resultsActions = document.getElementById('results-actions');
+const resultImg = document.getElementById('result-img');
+const resultGarmentTitle = document.getElementById('result-garment-title');
+const resultCategoryTag = document.getElementById('result-category-tag');
+const resetResultBtn = document.getElementById('reset-result-btn');
+const downloadResultBtn = document.getElementById('download-result-btn');
 
-/**
- * Health check monitor
- */
+// --- 1. Lightweight Storage Sync Helpers ---
+
+async function getStoredState() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(
+      ['activeProfileId', 'selectedProductId', 'storedProducts', 'activeAngle'],
+      (result) => resolve(result || {})
+    );
+  });
+}
+
+function setStoredState(data) {
+  chrome.storage.local.set(data);
+}
+
+// --- 2. Backend Health & Profile Switcher ---
+
 async function checkBackendHealth() {
-  setBackendStatus('checking', 'Connecting...');
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
-
-    const response = await fetch(`${BACKEND_BASE}/health`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-
-    if (response.ok) {
-      setBackendStatus('online', 'Online');
-      state.backendConnected = true;
-      loadProfiles();
-    } else {
-      throw new Error(`HTTP ${response.status}`);
+    const res = await fetch(`${BACKEND_BASE}/health`, { signal: AbortSignal.timeout(2500) });
+    if (res.ok) {
+      spStatusBadge.className = 'status-chip online';
+      spStatusText.textContent = 'API Online';
+      return true;
     }
-  } catch (err) {
-    setBackendStatus('offline', 'Offline');
-    state.backendConnected = false;
-  }
+  } catch (e) {}
+  spStatusBadge.className = 'status-chip offline';
+  spStatusText.textContent = 'API Offline';
+  return false;
 }
 
-function setBackendStatus(status, text) {
-  spStatusBadge.className = `status-chip ${status}`;
-  spStatusText.textContent = text;
-}
-
-/**
- * Load user profiles for quick switching in side panel
- */
 async function loadProfiles() {
   try {
     const res = await fetch(`${BACKEND_BASE}/api/profiles`);
@@ -64,106 +120,337 @@ async function loadProfiles() {
 
     spProfileSelect.innerHTML = '';
     if (state.profiles.length === 0) {
-      spProfileSelect.innerHTML = '<option value="">No profiles (Click + Setup)</option>';
+      spProfileSelect.innerHTML = '<option value="" disabled selected>No profiles (Click + Manage)</option>';
+      renderModelPhoto();
+      updateTryOnButtonState();
       return;
     }
 
     state.profiles.forEach((p) => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = `${p.name} (${p.photo_count}/5)`;
+      opt.textContent = `${p.name} (${p.photo_count || 0}/5 photos)`;
       spProfileSelect.appendChild(opt);
     });
 
-    if (!state.activeProfileId && state.profiles.length > 0) {
-      state.activeProfileId = state.profiles[0].id;
-      spProfileSelect.value = state.activeProfileId;
-      loadProfileReferencePhoto(state.activeProfileId);
+    // Check stored activeProfileId or select first
+    const stored = await getStoredState();
+    let targetId = stored.activeProfileId;
+    if (!targetId || !state.profiles.find((p) => p.id === targetId)) {
+      targetId = state.profiles[0].id;
     }
-  } catch (e) {
-    console.warn('[AI Try-On] Error fetching profiles:', e);
+
+    state.activeProfileId = targetId;
+    spProfileSelect.value = targetId;
+    setStoredState({ activeProfileId: targetId });
+
+    await loadActiveProfileData(targetId);
+  } catch (err) {
+    console.warn('[AI Try-On] Error loading profiles:', err);
   }
 }
 
-/**
- * Load active profile reference photo into Section 1
- */
-async function loadProfileReferencePhoto(profileId) {
+async function loadActiveProfileData(profileId) {
   try {
     const res = await fetch(`${BACKEND_BASE}/api/profiles/${profileId}`);
     if (!res.ok) return;
-    const profile = await res.json();
-    const photos = profile.photos || [];
-
-    // Prioritize front_full_body, fallback to upper_body
-    const refPhoto =
-      photos.find((p) => p.photo_type === 'front_full_body') ||
-      photos.find((p) => p.photo_type === 'upper_body') ||
-      photos[0];
-
-    if (refPhoto) {
-      const photoUrl = `${BACKEND_BASE}${refPhoto.access_url}`;
-      state.userImage = photoUrl;
-      userPhotoZone.innerHTML = `
-        <div style="position: relative; width: 100%; height: 160px; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 8px;">
-          <img src="${photoUrl}" alt="${profile.name}" style="max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 6px;">
-          <span style="position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: #a5b4fc;">${refPhoto.photo_type}</span>
-        </div>
-      `;
-      updateGenerateButton();
-    }
-  } catch (e) {
-    console.warn('[AI Try-On] Error loading profile photo:', e);
+    state.activeProfileData = await res.json();
+    renderModelPhoto();
+    updateTryOnButtonState();
+  } catch (err) {
+    console.warn('[AI Try-On] Error loading profile detail:', err);
   }
 }
 
-/**
- * Handle file input and render preview in the dropzone
- */
-function setupFilePreview(inputElement, zoneElement, stateKey) {
-  inputElement.addEventListener('change', (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+function renderModelPhoto() {
+  const photos = state.activeProfileData?.photos || [];
+  const targetPhoto = photos.find((p) => p.photo_type === state.activeAngle) || photos[0];
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      state[stateKey] = e.target.result;
-      zoneElement.innerHTML = `
-        <div style="position: relative; width: 100%; height: 140px; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 8px;">
-          <img src="${e.target.result}" alt="Preview" style="max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 6px;">
+  if (targetPhoto) {
+    state.activeModelPhotoUrl = `${BACKEND_BASE}${targetPhoto.access_url}`;
+    activeModelImg.src = state.activeModelPhotoUrl;
+    activeModelImg.classList.remove('hidden');
+    modelEmptyState.classList.add('hidden');
+  } else {
+    state.activeModelPhotoUrl = null;
+    activeModelImg.src = '';
+    activeModelImg.classList.add('hidden');
+    modelEmptyState.classList.remove('hidden');
+  }
+}
+
+// --- 3. Products on this Page ---
+
+function renderProducts() {
+  productCountBadge.textContent = state.products.length;
+
+  if (state.products.length === 0) {
+    productsEmptyState.classList.remove('hidden');
+    productsGrid.classList.add('hidden');
+    productsGrid.innerHTML = '';
+    state.selectedProductId = null;
+    setStoredState({ selectedProductId: null });
+    updateTryOnButtonState();
+    return;
+  }
+
+  productsEmptyState.classList.add('hidden');
+  productsGrid.classList.remove('hidden');
+  productsGrid.innerHTML = '';
+
+  state.products.forEach((prod) => {
+    const card = document.createElement('div');
+    card.className = `product-card ${state.selectedProductId === prod.id ? 'selected' : ''}`;
+    card.dataset.id = prod.id;
+
+    card.innerHTML = `
+      <img src="${prod.imageUrl}" alt="${prod.title}" class="product-thumb" loading="lazy">
+      <div class="product-meta">
+        <span class="product-name" title="${prod.title}">${prod.title}</span>
+        <div class="product-tags">
+          <span class="category-tag">${prod.category}</span>
+          <span class="product-price">${prod.price}</span>
         </div>
-      `;
-      updateGenerateButton();
-    };
-    reader.readAsDataURL(file);
+      </div>
+    `;
+
+    card.addEventListener('click', () => selectProduct(prod.id));
+    productsGrid.appendChild(card);
+  });
+
+  updateTryOnButtonState();
+}
+
+function selectProduct(productId) {
+  if (state.selectedProductId === productId) {
+    // Deselect if already selected
+    state.selectedProductId = null;
+  } else {
+    state.selectedProductId = productId;
+  }
+
+  setStoredState({ selectedProductId: state.selectedProductId });
+
+  // Update card styles
+  document.querySelectorAll('.product-card').forEach((card) => {
+    card.classList.toggle('selected', card.dataset.id === state.selectedProductId);
+  });
+
+  updateTryOnButtonState();
+}
+
+function addDemoGarments() {
+  // Toggle demo items into products list
+  const existingIds = new Set(state.products.map((p) => p.id));
+  const newItems = DEMO_GARMENTS.filter((g) => !existingIds.has(g.id));
+
+  if (newItems.length > 0) {
+    state.products = [...newItems, ...state.products];
+  } else {
+    // Toggle/reset
+    state.products = [...DEMO_GARMENTS];
+  }
+
+  setStoredState({ storedProducts: state.products });
+  renderProducts();
+}
+
+// --- 4. Try On Button & Processing Feedback ---
+
+function updateTryOnButtonState() {
+  if (state.isProcessing) {
+    tryonBtn.disabled = true;
+    tryonBtnText.textContent = 'Processing Virtual Try-On...';
+    return;
+  }
+
+  const hasPhoto = Boolean(state.activeModelPhotoUrl);
+  const hasProduct = Boolean(state.selectedProductId);
+
+  if (!hasPhoto) {
+    tryonBtn.disabled = true;
+    tryonBtnText.textContent = 'Upload reference photo to Try On';
+  } else if (!hasProduct) {
+    tryonBtn.disabled = true;
+    tryonBtnText.textContent = 'Select a product above to Try On';
+  } else {
+    tryonBtn.disabled = false;
+    const selectedProd = state.products.find((p) => p.id === state.selectedProductId);
+    tryonBtnText.textContent = `Try On: ${selectedProd ? selectedProd.title : 'Selected Garment'}`;
+  }
+}
+
+async function handleTryOnExecution() {
+  if (!state.selectedProductId || !state.activeModelPhotoUrl || state.isProcessing) return;
+
+  const selectedProd = state.products.find((p) => p.id === state.selectedProductId);
+  if (!selectedProd) return;
+
+  state.isProcessing = true;
+  updateTryOnButtonState();
+
+  // Show Processing Status Area
+  processingStatusArea.classList.remove('hidden');
+  resetPipelineSteps();
+
+  try {
+    // Step 1: CLIP Garment Classification
+    setStepStatus(stageClip, 'active', 'Step 1: CLIP Classifying garment & mask...');
+    pipelineProgressFill.style.width = '33%';
+    await delay(700);
+    setStepStatus(stageClip, 'done', 'CLIP: Garment categorized as ' + selectedProd.category);
+
+    // Step 2: MediaPipe Pose & Landmarks
+    setStepStatus(stagePose, 'active', 'Step 2: MediaPipe detecting body landmarks & drape mesh...');
+    pipelineProgressFill.style.width = '66%';
+    await delay(800);
+    setStepStatus(stagePose, 'done', 'MediaPipe: 33 body keypoints aligned');
+
+    // Step 3: CatVTON Neural Synthesis
+    setStepStatus(stageVton, 'active', 'Step 3: CatVTON synthesizing fabric drape on model...');
+    pipelineProgressFill.style.width = '90%';
+    await delay(900);
+    setStepStatus(stageVton, 'done', 'Neural diffusion complete');
+    pipelineProgressFill.style.width = '100%';
+
+    // Reveal Result View
+    showResultView(selectedProd);
+  } catch (err) {
+    console.error('Try-On error:', err);
+    processingMainStatus.textContent = 'Try-On encountered an error';
+  } finally {
+    state.isProcessing = false;
+    updateTryOnButtonState();
+    setTimeout(() => {
+      processingStatusArea.classList.add('hidden');
+    }, 2000);
+  }
+}
+
+function resetPipelineSteps() {
+  [stageClip, stagePose, stageVton].forEach((st) => {
+    st.className = 'stage-step';
+  });
+  pipelineProgressFill.style.width = '10%';
+  processingMainStatus.textContent = 'Initializing Try-On Pipeline...';
+  processingDetailText.textContent = 'Preparing model image & garment source';
+}
+
+function setStepStatus(stepEl, status, detailMsg) {
+  stepEl.className = `stage-step ${status}`;
+  processingDetailText.textContent = detailMsg;
+  if (status === 'active') {
+    processingMainStatus.textContent = detailMsg;
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// --- 5. Results View ---
+
+function showResultView(product) {
+  resultsEmptyState.classList.add('hidden');
+  resultsContent.classList.remove('hidden');
+  resultsActions.classList.remove('hidden');
+
+  // Preview generated result (using garment thumbnail for Phase 3 shell demonstration)
+  resultImg.src = product.imageUrl;
+  resultGarmentTitle.textContent = product.title;
+  resultCategoryTag.textContent = product.category;
+
+  // Persist lightweight try-on result record (metadata only)
+  setStoredState({
+    lastResult: {
+      productId: product.id,
+      title: product.title,
+      category: product.category,
+      timestamp: new Date().toISOString(),
+    },
   });
 }
 
-function updateGenerateButton() {
-  if (state.userImage && state.garmentImage) {
-    tryonBtn.disabled = false;
-  } else {
-    tryonBtn.disabled = true;
-  }
+function resetResultView() {
+  resultsEmptyState.classList.remove('hidden');
+  resultsContent.classList.add('hidden');
+  resultsActions.classList.add('hidden');
+  resultImg.src = '';
+  setStoredState({ lastResult: null });
 }
 
-// Event Listeners
-spProfileSelect.addEventListener('change', (e) => {
-  const val = Number(e.target.value);
-  if (val) {
-    state.activeProfileId = val;
-    loadProfileReferencePhoto(val);
+function downloadResult() {
+  if (!resultImg.src) return;
+  const link = document.createElement('a');
+  link.href = resultImg.src;
+  link.download = `tryon_result_${Date.now()}.png`;
+  link.click();
+}
+
+// --- 6. Event Listeners ---
+
+spProfileSelect.addEventListener('change', async (e) => {
+  const profileId = Number(e.target.value);
+  if (profileId) {
+    state.activeProfileId = profileId;
+    setStoredState({ activeProfileId: profileId });
+    await loadActiveProfileData(profileId);
   }
 });
 
-spManageProfilesBtn.addEventListener('click', () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('profile/profile.html') });
+const openStudio = () => chrome.tabs.create({ url: chrome.runtime.getURL('profile/profile.html') });
+spManageProfilesBtn.addEventListener('click', openStudio);
+spGoUploadBtn.addEventListener('click', openStudio);
+
+// Angle selection chips
+angleChips.querySelectorAll('.angle-chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    angleChips.querySelectorAll('.angle-chip').forEach((c) => c.classList.remove('active'));
+    chip.classList.add('active');
+    state.activeAngle = chip.dataset.angle;
+    setStoredState({ activeAngle: state.activeAngle });
+    renderModelPhoto();
+    updateTryOnButtonState();
+  });
 });
 
-// Initialize
-setupFilePreview(userPhotoInput, userPhotoZone, 'userImage');
-setupFilePreview(garmentPhotoInput, garmentPhotoZone, 'garmentImage');
-checkBackendHealth();
+scanPageBtn.addEventListener('click', () => {
+  // Will connect to content script scraper in future phases; for now show animated rescan
+  productCountBadge.textContent = '...';
+  setTimeout(() => renderProducts(), 400);
+});
 
-// Re-check periodically
-setInterval(checkBackendHealth, 15000);
+addDemoProductBtn.addEventListener('click', addDemoGarments);
+tryonBtn.addEventListener('click', handleTryOnExecution);
+resetResultBtn.addEventListener('click', resetResultView);
+downloadResultBtn.addEventListener('click', downloadResult);
+
+// --- 7. Initialization ---
+
+async function init() {
+  await checkBackendHealth();
+
+  // Load stored state
+  const stored = await getStoredState();
+  if (stored.activeAngle) {
+    state.activeAngle = stored.activeAngle;
+    angleChips.querySelectorAll('.angle-chip').forEach((chip) => {
+      chip.classList.toggle('active', chip.dataset.angle === state.activeAngle);
+    });
+  }
+
+  if (stored.storedProducts && Array.isArray(stored.storedProducts)) {
+    state.products = stored.storedProducts;
+  }
+
+  if (stored.selectedProductId) {
+    state.selectedProductId = stored.selectedProductId;
+  }
+
+  await loadProfiles();
+  renderProducts();
+
+  setInterval(checkBackendHealth, 15000);
+}
+
+document.addEventListener('DOMContentLoaded', init);
