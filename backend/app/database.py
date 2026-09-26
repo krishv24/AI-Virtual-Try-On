@@ -50,9 +50,15 @@ def init_db():
             CREATE TABLE IF NOT EXISTS profiles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
+                consent_no_training INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL
             );
         """)
+
+        try:
+            cursor.execute("ALTER TABLE profiles ADD COLUMN consent_no_training INTEGER DEFAULT 1;")
+        except sqlite3.OperationalError:
+            pass
 
         # 2. profile_photos table
         # photo_type values: front_full_body, upper_body, legs, feet, face
@@ -97,11 +103,12 @@ def init_db():
             );
         """)
 
-        # Phase 9 Safe Migrations for existing databases
+        # Phase 9 & 10 Safe Migrations for existing databases
         for col_def in [
             "accuracy_score REAL DEFAULT 1.0",
             "is_low_confidence INTEGER DEFAULT 0",
             "accuracy_metrics TEXT",
+            "garment_image_url TEXT",
         ]:
             col_name = col_def.split()[0]
             try:
@@ -113,4 +120,7 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_photos_profile_id ON profile_photos(profile_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_photos_type ON profile_photos(photo_type);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tryon_profile_id ON tryon_results(profile_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tryon_profile_product ON tryon_results(profile_id, product_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tryon_profile_garment ON tryon_results(profile_id, garment_image_url);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_source_url ON products(source_url);")
+

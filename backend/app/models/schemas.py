@@ -11,6 +11,7 @@ class PhotoType(str, Enum):
 
 class ProfileBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Name or label for the user profile")
+    consent_no_training: bool = Field(True, description="Consent confirming photos are never used for AI model training")
 
 class ProfileCreate(ProfileBase):
     pass
@@ -28,12 +29,14 @@ class ProfilePhotoResponse(BaseModel):
 class ProfileResponse(BaseModel):
     id: int
     name: str
+    consent_no_training: bool = True
     created_at: str
     photo_count: int = 0
 
 class ProfileDetailResponse(BaseModel):
     id: int
     name: str
+    consent_no_training: bool = True
     created_at: str
     photos: List[ProfilePhotoResponse] = []
 
@@ -59,6 +62,7 @@ class TryOnRequest(BaseModel):
     product_id: Optional[int] = Field(None, description="Optional associated product ID")
     category: Optional[str] = Field("overall", description="Garment type (upper, lower, overall)")
     photo_type: Optional[PhotoType] = Field(None, description="Specific profile photo type to use")
+    force_refresh: bool = Field(False, description="Bypass cache and force re-generation")
 
 class ClassifyRequest(BaseModel):
     image_url: str = Field(..., description="Garment image URL or data URI")
@@ -81,8 +85,11 @@ class TryOnResultResponse(BaseModel):
     accuracy_score: Optional[float] = 1.0
     is_low_confidence: bool = False
     accuracy_metrics: Optional[Dict[str, Any]] = None
+    cached: bool = False
     created_at: str
     access_url: str
+    product_title: Optional[str] = None
+    garment_image_url: Optional[str] = None
 
 
 class TryOnStatusResponse(BaseModel):

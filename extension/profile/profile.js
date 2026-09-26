@@ -349,17 +349,20 @@ async function handleDeletePhoto() {
 }
 
 /**
- * Create new profile
+ * Create new profile with privacy consent
  */
 async function handleCreateProfile() {
   const name = profileNameInput.value.trim();
   if (!name) return;
 
+  const consentCheckbox = document.getElementById('profile-consent-checkbox');
+  const consentVal = consentCheckbox ? consentCheckbox.checked : true;
+
   try {
     const res = await fetch(`${API_BASE}/api/profiles`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, consent_no_training: consentVal }),
     });
 
     if (res.ok) {
@@ -378,11 +381,13 @@ async function handleCreateProfile() {
 }
 
 /**
- * Delete active profile
+ * Delete active profile and purge all associated photos and tryon results
  */
 async function handleDeleteProfile() {
   if (!state.activeProfileId) return;
-  const confirmed = confirm(`Are you sure you want to delete profile "${state.activeProfileData?.name}"? All photos will be permanently removed.`);
+  const confirmed = confirm(
+    `Are you sure you want to delete profile "${state.activeProfileData?.name}"?\n\nAll reference photos and synthesized try-on result images will be permanently erased from non-public disk storage (GDPR / Privacy Right-to-be-Forgotten).`
+  );
   if (!confirmed) return;
 
   try {
@@ -397,6 +402,7 @@ async function handleDeleteProfile() {
     console.error('Failed to delete profile:', err);
   }
 }
+
 
 /**
  * Banner feedback helper

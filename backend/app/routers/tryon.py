@@ -84,17 +84,78 @@ async def create_tryon(
     conn: sqlite3.Connection = Depends(get_db),
 ):
     """
-    Phase 7 Category-Aware Virtual Try-On Router:
-    1. Downloads/decodes the product garment image.
-    2. Runs CLIP classification if category is unspecified, 'auto', or 'overall'.
-    3. Selects specialized plugin handler (CatVTON ZeroGPU, Footwear, or MediaPipe Landmark Placement).
-    4. Fetches the optimal reference profile photo slot (upper_body, legs, feet, face, or front_full_body).
-    5. Executes the plugin pipeline and saves the composited result to private storage.
+    Phase 7 & 10 Category-Aware Virtual Try-On Router with Caching:
+    1. Checks cache for existing try-on result tied to (profile_id, product_id/garment).
+       If found and not force_refresh, returns cached result instantly without re-generation.
+    2. Downloads/decodes the product garment image.
+    3. Runs CLIP classification if category is unspecified, 'auto', or 'overall'.
+    4. Selects specialized plugin handler (CatVTON ZeroGPU, Footwear, or MediaPipe Landmark Placement).
+    5. Fetches the optimal reference profile photo slot (upper_body, legs, feet, face, or front_full_body).
+    6. Executes the plugin pipeline and saves the composited result to private storage.
+    7. Validates color/pattern fidelity (Phase 9 Safeguards) and records result in database.
     """
     # 1. Determine initial category hint from request
     effective_category = (request.category or "").strip().lower()
     if not effective_category or effective_category in ["auto", "unknown"]:
         effective_category = "overall"
+
+
+    # 0. Check result cache tied to profile_id + product_id unless forced refresh
+    if not request.force_refresh and request.product_id:
+        cursor = conn.cursor()
+        cached_row = None
+        if effective_category not in ["auto", "overall", "unknown"]:
+            cursor.execute(
+                """
+                SELECT t.id, t.profile_id, t.product_id, t.category, t.image_path,
+                       t.accuracy_score, t.is_low_confidence, t.accuracy_metrics, t.created_at,
+                       t.garment_image_url, p.title as product_title
+                FROM tryon_results t
+                LEFT JOIN products p ON t.product_id = p.id
+                WHERE t.profile_id = ? AND t.product_id = ? AND t.category = ?
+                ORDER BY t.id DESC LIMIT 1;
+                """,
+                (request.profile_id, request.product_id, effective_category),
+            )
+            cached_row = cursor.fetchone()
+        if not cached_row:
+            cursor.execute(
+                """
+                SELECT t.id, t.profile_id, t.product_id, t.category, t.image_path,
+                       t.accuracy_score, t.is_low_confidence, t.accuracy_metrics, t.created_at,
+                       t.garment_image_url, p.title as product_title
+                FROM tryon_results t
+                LEFT JOIN products p ON t.product_id = p.id
+                WHERE t.profile_id = ? AND t.product_id = ?
+                ORDER BY t.id DESC LIMIT 1;
+                """,
+                (request.profile_id, request.product_id),
+            )
+            cached_row = cursor.fetchone()
+
+        if cached_row and Path(cached_row["image_path"]).exists():
+            metrics_obj = None
+            if "accuracy_metrics" in cached_row.keys() and cached_row["accuracy_metrics"]:
+                try:
+                    metrics_obj = json.loads(cached_row["accuracy_metrics"])
+                except Exception:
+                    metrics_obj = None
+            handler_obj = tryon_router_registry.get_handler(cached_row["category"])
+            return TryOnResultResponse(
+                id=cached_row["id"],
+                profile_id=cached_row["profile_id"],
+                product_id=cached_row["product_id"],
+                category=cached_row["category"],
+                handler_name=handler_obj.name if handler_obj else "Cached Synthesis",
+                accuracy_score=cached_row["accuracy_score"] if "accuracy_score" in cached_row.keys() else 1.0,
+                is_low_confidence=bool(cached_row["is_low_confidence"]) if "is_low_confidence" in cached_row.keys() else False,
+                accuracy_metrics=metrics_obj,
+                cached=True,
+                created_at=cached_row["created_at"],
+                access_url=f"/api/tryon/results/{cached_row['id']}/file",
+                product_title=cached_row["product_title"] if "product_title" in cached_row.keys() else None,
+                garment_image_url=cached_row["garment_image_url"] if "garment_image_url" in cached_row.keys() else request.garment_image_url,
+            )
 
     # 2. Resolve profile photo upfront (validates profile exists and has uploaded photos)
     handler = tryon_router_registry.get_handler(effective_category)
@@ -102,6 +163,7 @@ async def create_tryon(
     photo_id, profile_photo_path, matched_photo_type = catvton_service.resolve_profile_photo(
         profile_id=request.profile_id,
         conn=conn,
+
         category=effective_category,
         requested_type=requested_type,
     )
@@ -156,21 +218,30 @@ async def create_tryon(
         final_storage_path = settings.STORAGE_DIR / result_filename
         shutil.copy(composited_temp_path, final_storage_path)
 
-        # 8. Insert into SQLite tryon_results table with accuracy metrics
+        # 8. Insert into SQLite tryon_results table with accuracy metrics and garment_image_url
         created_at = datetime.now(timezone.utc).isoformat()
         cursor = conn.cursor()
+
+        product_title = None
+        if request.product_id:
+            cursor.execute("SELECT title FROM products WHERE id = ?;", (request.product_id,))
+            p_row = cursor.fetchone()
+            if p_row:
+                product_title = p_row["title"]
+
         cursor.execute(
             """
             INSERT INTO tryon_results (
-                profile_id, product_id, category, image_path,
+                profile_id, product_id, category, garment_image_url, image_path,
                 accuracy_score, is_low_confidence, accuracy_metrics, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 request.profile_id,
                 request.product_id,
                 effective_category,
+                request.garment_image_url,
                 str(final_storage_path),
                 accuracy_score,
                 is_low_conf,
@@ -189,8 +260,11 @@ async def create_tryon(
             accuracy_score=accuracy_score,
             is_low_confidence=bool(is_low_conf),
             accuracy_metrics=accuracy_data,
+            cached=False,
             created_at=created_at,
             access_url=f"/api/tryon/results/{result_id}/file",
+            product_title=product_title,
+            garment_image_url=request.garment_image_url,
         )
 
     finally:
@@ -200,14 +274,17 @@ async def create_tryon(
 @router.get("/results/{result_id}", response_model=TryOnResultResponse)
 def get_tryon_result(result_id: int, conn: sqlite3.Connection = Depends(get_db)):
     """
-    Retrieve metadata for a specific try-on result including accuracy metrics.
+    Retrieve metadata for a specific try-on result including accuracy metrics and product info.
     """
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT id, profile_id, product_id, category, accuracy_score, is_low_confidence, accuracy_metrics, created_at
-        FROM tryon_results
-        WHERE id = ?;
+        SELECT t.id, t.profile_id, t.product_id, t.category, t.accuracy_score,
+               t.is_low_confidence, t.accuracy_metrics, t.created_at,
+               t.garment_image_url, p.title as product_title
+        FROM tryon_results t
+        LEFT JOIN products p ON t.product_id = p.id
+        WHERE t.id = ?;
         """,
         (result_id,),
     )
@@ -215,7 +292,6 @@ def get_tryon_result(result_id: int, conn: sqlite3.Connection = Depends(get_db))
     if not row:
         raise HTTPException(status_code=404, detail="Try-on result not found")
 
-    # Match handler name for introspection
     handler = tryon_router_registry.get_handler(row["category"])
 
     metrics_obj = None
@@ -230,12 +306,15 @@ def get_tryon_result(result_id: int, conn: sqlite3.Connection = Depends(get_db))
         profile_id=row["profile_id"],
         product_id=row["product_id"],
         category=row["category"],
-        handler_name=handler.name,
+        handler_name=handler.name if handler else "Specialized Synthesis",
         accuracy_score=row["accuracy_score"] if "accuracy_score" in row.keys() else 1.0,
         is_low_confidence=bool(row["is_low_confidence"]) if "is_low_confidence" in row.keys() else False,
         accuracy_metrics=metrics_obj,
+        cached=False,
         created_at=row["created_at"],
         access_url=f"/api/tryon/results/{row['id']}/file",
+        product_title=row["product_title"] if "product_title" in row.keys() else None,
+        garment_image_url=row["garment_image_url"] if "garment_image_url" in row.keys() else None,
     )
 
 
@@ -267,15 +346,18 @@ def get_tryon_result_file(result_id: int, conn: sqlite3.Connection = Depends(get
 @router.get("/profile/{profile_id}", response_model=List[TryOnResultResponse])
 def get_profile_tryon_history(profile_id: int, conn: sqlite3.Connection = Depends(get_db)):
     """
-    List all historical try-on results for a given profile.
+    List all historical try-on results for a given profile (Closet/Wardrobe history).
     """
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT id, profile_id, product_id, category, accuracy_score, is_low_confidence, accuracy_metrics, created_at
-        FROM tryon_results
-        WHERE profile_id = ?
-        ORDER BY id DESC;
+        SELECT t.id, t.profile_id, t.product_id, t.category, t.accuracy_score,
+               t.is_low_confidence, t.accuracy_metrics, t.created_at,
+               t.garment_image_url, p.title as product_title
+        FROM tryon_results t
+        LEFT JOIN products p ON t.product_id = p.id
+        WHERE t.profile_id = ?
+        ORDER BY t.id DESC;
         """,
         (profile_id,),
     )
@@ -288,18 +370,23 @@ def get_profile_tryon_history(profile_id: int, conn: sqlite3.Connection = Depend
                 metrics_obj = json.loads(row["accuracy_metrics"])
             except Exception:
                 metrics_obj = None
+        h_obj = tryon_router_registry.get_handler(row["category"])
         results.append(
             TryOnResultResponse(
                 id=row["id"],
                 profile_id=row["profile_id"],
                 product_id=row["product_id"],
                 category=row["category"],
-                handler_name=tryon_router_registry.get_handler(row["category"]).name,
+                handler_name=h_obj.name if h_obj else "Specialized Synthesis",
                 accuracy_score=row["accuracy_score"] if "accuracy_score" in row.keys() else 1.0,
                 is_low_confidence=bool(row["is_low_confidence"]) if "is_low_confidence" in row.keys() else False,
                 accuracy_metrics=metrics_obj,
+                cached=False,
                 created_at=row["created_at"],
                 access_url=f"/api/tryon/results/{row['id']}/file",
+                product_title=row["product_title"] if "product_title" in row.keys() else None,
+                garment_image_url=row["garment_image_url"] if "garment_image_url" in row.keys() else None,
             )
         )
     return results
+

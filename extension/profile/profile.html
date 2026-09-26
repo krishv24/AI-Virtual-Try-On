@@ -127,11 +127,18 @@
             <label for="profile-name-input">Profile Name</label>
             <input type="text" id="profile-name-input" placeholder="e.g. Everyday Fit" maxlength="60">
           </div>
+          <div class="consent-group">
+            <label class="consent-checkbox-label">
+              <input type="checkbox" id="profile-consent-checkbox" checked>
+              <span><strong>Privacy Guarantee:</strong> I confirm my uploaded reference photos will only be used for personal virtual fitting synthesis and will <em>never</em> be used for AI model training or public display.</span>
+            </label>
+          </div>
           <div class="dialog-buttons">
             <button id="cancel-create-btn" class="btn btn-ghost">Cancel</button>
             <button id="submit-create-btn" class="btn btn-primary">Create Profile</button>
           </div>
         </div>
+
 
         <!-- Active Step Upload Card -->
         <div class="stage-card" id="stage-card">

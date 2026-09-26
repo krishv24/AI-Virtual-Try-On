@@ -178,13 +178,54 @@
             </div>
 
             <div class="result-meta-row">
-              <span id="result-garment-title" class="result-title">Sample Garment</span>
-              <span id="result-category-tag" class="category-pill">Upper Body</span>
+              <div class="result-meta-left">
+                <span id="result-garment-title" class="result-title">Sample Garment</span>
+                <span id="result-category-tag" class="category-pill">Upper Body</span>
+              </div>
+              <div class="result-meta-right">
+                <span id="result-cached-badge" class="cached-pill hidden" title="Instant cache hit">⚡ Cached</span>
+                <button id="force-refresh-btn" class="text-btn mini-btn hidden" title="Force re-run without cache">🔄 Re-try</button>
+              </div>
             </div>
           </div>
         </div>
       </section>
+
+      <!-- 5. My Closet / Fitting Wardrobe -->
+      <section class="panel-card closet-card">
+        <div class="card-header">
+          <div class="header-left">
+            <span class="section-icon">🧥</span>
+            <span class="card-title">My Closet</span>
+            <span id="closet-count-badge" class="count-badge">0</span>
+          </div>
+          <div class="header-actions">
+            <button id="refresh-closet-btn" class="icon-action-btn" title="Refresh closet fittings">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="closet-viewport" id="closet-viewport">
+          <!-- Closet Empty State -->
+          <div id="closet-empty-state" class="empty-state-view">
+            <div class="empty-icon-circle">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M3 6h18M3 12h18M3 18h18"></path>
+              </svg>
+            </div>
+            <h4>Closet is Empty</h4>
+            <p>Past fittings for this profile are saved here and cached for instant preview.</p>
+          </div>
+
+          <!-- Closet Grid -->
+          <div id="closet-grid" class="closet-grid hidden"></div>
+        </div>
+      </section>
     </main>
+
 
     <!-- Footer Notice -->
     <footer class="studio-footer">

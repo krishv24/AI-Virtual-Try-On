@@ -29,6 +29,16 @@ class CatVTONService:
         self.space_id = settings.HF_SPACE_ID or "krishv10/AI_Try_On"
         self.hf_token = settings.HF_TOKEN
         self._cached_client: Optional[Client] = None
+        self._photo_cache: Dict[Any, Tuple[int, Path, str]] = {}
+
+    def invalidate_photo_cache(self, profile_id: Optional[int] = None):
+        """Invalidate backend-cached profile photo paths."""
+        if profile_id is None:
+            self._photo_cache.clear()
+        else:
+            keys_to_del = [k for k in self._photo_cache if k[0] == profile_id]
+            for k in keys_to_del:
+                self._photo_cache.pop(k, None)
 
     def get_space_status(self) -> dict:
         """
@@ -95,6 +105,16 @@ class CatVTONService:
         3. front_full_body fallback
         4. Any available photo for this profile
         """
+        # 0. Check in-memory path cache
+        req_type_str = requested_type.value if hasattr(requested_type, "value") else str(requested_type) if requested_type else None
+        cache_key = (profile_id, (category or "overall").lower(), req_type_str)
+        if cache_key in self._photo_cache:
+            pid, cached_path, ptype = self._photo_cache[cache_key]
+            if cached_path.exists():
+                return pid, cached_path, ptype
+            else:
+                self._photo_cache.pop(cache_key, None)
+
         cursor = conn.cursor()
 
         # Check if profile exists
@@ -119,40 +139,52 @@ class CatVTONService:
 
         photos_by_type = {p["photo_type"]: p for p in photos}
 
+        resolved_tuple = None
+
         # 1. Explicit requested type
-        if requested_type and requested_type.value in photos_by_type:
-            selected = photos_by_type[requested_type.value]
+        if req_type_str and req_type_str in photos_by_type:
+            selected = photos_by_type[req_type_str]
             path = Path(selected["file_path"])
             if path.exists():
-                return selected["id"], path, selected["photo_type"]
+                resolved_tuple = (selected["id"], path, selected["photo_type"])
 
         # 2. Determine preferred types based on category
-        cat_lower = (category or "overall").lower()
-        if any(w in cat_lower for w in ["upper", "top", "shirt", "t-shirt", "tshirt", "hoodie", "jacket", "sweater", "blouse", "coat"]):
-            candidates = ["upper_body", "front_full_body"]
-        elif any(w in cat_lower for w in ["lower", "pant", "jeans", "skirt", "trouser", "short", "bottom", "legging"]):
-            candidates = ["legs", "front_full_body"]
-        elif any(w in cat_lower for w in ["foot", "feet", "shoe", "sneaker", "boot", "sandal", "heel"]):
-            candidates = ["feet", "front_full_body"]
-        else:
-            candidates = ["front_full_body", "upper_body"]
+        if not resolved_tuple:
+            cat_lower = (category or "overall").lower()
+            if any(w in cat_lower for w in ["upper", "top", "shirt", "t-shirt", "tshirt", "hoodie", "jacket", "sweater", "blouse", "coat"]):
+                candidates = ["upper_body", "front_full_body"]
+            elif any(w in cat_lower for w in ["lower", "pant", "jeans", "skirt", "trouser", "short", "bottom", "legging"]):
+                candidates = ["legs", "front_full_body"]
+            elif any(w in cat_lower for w in ["foot", "feet", "shoe", "sneaker", "boot", "sandal", "heel"]):
+                candidates = ["feet", "front_full_body"]
+            else:
+                candidates = ["front_full_body", "upper_body"]
 
-        for cand in candidates:
-            if cand in photos_by_type:
-                p = Path(photos_by_type[cand]["file_path"])
-                if p.exists():
-                    return photos_by_type[cand]["id"], p, cand
+            for cand in candidates:
+                if cand in photos_by_type:
+                    p = Path(photos_by_type[cand]["file_path"])
+                    if p.exists():
+                        resolved_tuple = (photos_by_type[cand]["id"], p, cand)
+                        break
 
         # 3. Fallback to any valid photo file on disk
-        for p_row in photos:
-            p = Path(p_row["file_path"])
-            if p.exists():
-                return p_row["id"], p, p_row["photo_type"]
+        if not resolved_tuple:
+            for p_row in photos:
+                p = Path(p_row["file_path"])
+                if p.exists():
+                    resolved_tuple = (p_row["id"], p, p_row["photo_type"])
+                    break
 
-        raise HTTPException(
-            status_code=400,
-            detail="Profile photos are registered in database but the image files are missing from storage.",
-        )
+        if not resolved_tuple:
+            raise HTTPException(
+                status_code=400,
+                detail="Profile photos are registered in database but the image files are missing from storage.",
+            )
+
+        # Cache resolved photo reference
+        self._photo_cache[cache_key] = resolved_tuple
+        return resolved_tuple
+
 
     async def download_garment_image(self, garment_url: str, output_dir: Path) -> Path:
         """

@@ -44,6 +44,7 @@ let state = {
   products: [],
   selectedProductId: null,
   isProcessing: false,
+  closetItems: [],
 };
 
 // DOM References
@@ -83,6 +84,14 @@ const downloadResultBtn = document.getElementById('download-result-btn');
 const comparisonBadge = document.getElementById('comparison-badge');
 const lowConfidenceBanner = document.getElementById('low-confidence-banner');
 const lowConfidenceReason = document.getElementById('low-confidence-reason');
+const resultCachedBadge = document.getElementById('result-cached-badge');
+const forceRefreshBtn = document.getElementById('force-refresh-btn');
+
+// Closet Wardrobe References
+const closetCountBadge = document.getElementById('closet-count-badge');
+const refreshClosetBtn = document.getElementById('refresh-closet-btn');
+const closetEmptyState = document.getElementById('closet-empty-state');
+const closetGrid = document.getElementById('closet-grid');
 
 // --- 1. Lightweight Storage Sync Helpers ---
 
@@ -160,6 +169,7 @@ async function loadActiveProfileData(profileId) {
     state.activeProfileData = await res.json();
     renderModelPhoto();
     updateTryOnButtonState();
+    await loadClosetHistory(profileId);
   } catch (err) {
     console.warn('[AI Try-On] Error loading profile detail:', err);
   }
@@ -375,7 +385,7 @@ function updateTryOnButtonState() {
   }
 }
 
-async function handleTryOnExecution() {
+async function handleTryOnExecution(forceRefresh = false) {
   if (!state.selectedProductId || !state.activeProfileId || state.isProcessing) return;
 
   const selectedProd = state.products.find((p) => p.id === state.selectedProductId);
@@ -395,17 +405,17 @@ async function handleTryOnExecution() {
     // Step 1: Garment & Variant Analysis
     setStepStatus(stageClip, 'active', 'Step 1: Analyzing garment variant & category...');
     pipelineProgressFill.style.width = '25%';
-    await delay(500);
+    await delay(350);
     setStepStatus(stageClip, 'done', `Garment identified: ${selectedProd.category || 'Apparel'}`);
 
     // Step 2: MediaPipe Landmark resolution
     setStepStatus(stagePose, 'active', 'Step 2: Resolving profile pose & body keypoints...');
     pipelineProgressFill.style.width = '50%';
-    await delay(600);
+    await delay(350);
     setStepStatus(stagePose, 'done', 'Profile pose aligned with garment drape');
 
-    // Step 3: Synthesis via Specialized Pipeline
-    setStepStatus(stageVton, 'active', 'Step 3: Running specialized try-on pipeline...');
+    // Step 3: Synthesis via Specialized Pipeline or Instant Cache Hit
+    setStepStatus(stageVton, 'active', forceRefresh ? 'Step 3: Re-generating fitting (cache bypassed)...' : 'Step 3: Checking cache & executing synthesis...');
     pipelineProgressFill.style.width = '75%';
 
     const payload = {
@@ -413,6 +423,7 @@ async function handleTryOnExecution() {
       garment_image_url: chosenGarmentImg,
       product_id: typeof selectedProd.id === 'number' ? selectedProd.id : null,
       category: selectedProd.category || 'auto',
+      force_refresh: forceRefresh,
     };
 
     const response = await fetch(`${BACKEND_BASE}/api/tryon`, {
@@ -434,13 +445,16 @@ async function handleTryOnExecution() {
 
     const tryonResult = await response.json();
 
-    const handlerLabel = tryonResult.handler_name || 'Try-on synthesis';
+    const handlerLabel = tryonResult.cached
+      ? '⚡ Instant Cache Hit'
+      : (tryonResult.handler_name || 'Try-on synthesis');
     setStepStatus(stageVton, 'done', `${handlerLabel} complete!`);
     pipelineProgressFill.style.width = '100%';
-    await delay(400);
+    await delay(350);
 
     // Reveal Result View with real composited image
     showResultView(selectedProd, tryonResult);
+    await loadClosetHistory(state.activeProfileId);
   } catch (err) {
     console.error('Try-On error:', err);
     setStepStatus(stageVton, 'error', `Try-On failed: ${err.message}`);
@@ -455,6 +469,7 @@ async function handleTryOnExecution() {
     }, 3000);
   }
 }
+
 
 function resetPipelineSteps() {
   [stageClip, stagePose, stageVton].forEach((st) => {
@@ -496,6 +511,15 @@ function showResultView(product, tryonResult = null) {
   resultGarmentTitle.textContent = product.title;
   const displayCat = (tryonResult && tryonResult.category) ? tryonResult.category : (product.category || 'Apparel');
   resultCategoryTag.textContent = displayCat;
+
+  // Cached indicator & force-refresh button
+  if (tryonResult && tryonResult.cached) {
+    if (resultCachedBadge) resultCachedBadge.classList.remove('hidden');
+    if (forceRefreshBtn) forceRefreshBtn.classList.remove('hidden');
+  } else {
+    if (resultCachedBadge) resultCachedBadge.classList.add('hidden');
+    if (forceRefreshBtn) forceRefreshBtn.classList.add('hidden');
+  }
 
   // Phase 9 Product Accuracy Safeguards: flag low confidence
   if (tryonResult && tryonResult.is_low_confidence) {
@@ -546,6 +570,8 @@ function resetResultView() {
   resultImg.src = '';
   if (lowConfidenceBanner) lowConfidenceBanner.classList.add('hidden');
   if (comparisonBadge) comparisonBadge.classList.remove('low-conf');
+  if (resultCachedBadge) resultCachedBadge.classList.add('hidden');
+  if (forceRefreshBtn) forceRefreshBtn.classList.add('hidden');
   setStoredState({ lastResult: null });
 }
 
@@ -555,6 +581,73 @@ function downloadResult() {
   link.href = resultImg.src;
   link.download = `tryon_result_${Date.now()}.png`;
   link.click();
+}
+
+// --- 5.5 Closet / Wardrobe History ---
+
+async function loadClosetHistory(profileId) {
+  if (!profileId) return;
+  try {
+    const res = await fetch(`${BACKEND_BASE}/api/tryon/profile/${profileId}`);
+    if (!res.ok) return;
+    const history = await res.json();
+    state.closetItems = history || [];
+    renderCloset();
+  } catch (err) {
+    console.warn('[AI Try-On] Error loading closet history:', err);
+  }
+}
+
+function renderCloset() {
+  if (!closetCountBadge || !closetEmptyState || !closetGrid) return;
+  const items = state.closetItems || [];
+  closetCountBadge.textContent = items.length;
+
+  if (items.length === 0) {
+    closetEmptyState.classList.remove('hidden');
+    closetGrid.classList.add('hidden');
+    closetGrid.innerHTML = '';
+    return;
+  }
+
+  closetEmptyState.classList.add('hidden');
+  closetGrid.classList.remove('hidden');
+  closetGrid.innerHTML = '';
+
+  items.forEach((item) => {
+    const card = document.createElement('div');
+    card.className = 'closet-item';
+    card.title = `Click to view fitting for ${item.product_title || item.category}`;
+
+    const scorePct = Math.round((item.accuracy_score || 0.9) * 100);
+    const isLow = item.is_low_confidence;
+
+    card.innerHTML = `
+      <div class="closet-thumb-wrap">
+        <img class="closet-thumb" src="${BACKEND_BASE}${item.access_url}" alt="${item.category}" loading="lazy">
+        <span class="closet-item-badge ${isLow ? 'low' : ''}">${isLow ? '⚠️ Low' : `${scorePct}%`}</span>
+      </div>
+      <div class="closet-item-info">
+        <span class="closet-item-title">${item.product_title || `${item.category.toUpperCase()} Fitting`}</span>
+        <div class="closet-item-meta">
+          <span>${item.category}</span>
+          <span>${new Date(item.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+        </div>
+      </div>
+    `;
+
+    card.addEventListener('click', () => {
+      const mockProd = {
+        id: item.product_id || 9999,
+        title: item.product_title || `${item.category.toUpperCase()} Fitting`,
+        category: item.category,
+        imageUrl: item.garment_image_url || `${BACKEND_BASE}${item.access_url}`,
+      };
+      showResultView(mockProd, item);
+    });
+
+    closetGrid.appendChild(card);
+  });
 }
 
 // --- 6. Event Listeners ---
@@ -626,8 +719,17 @@ addDemoProductBtn.addEventListener('click', addDemoGarments);
 tryonBtn.addEventListener('click', handleTryOnExecution);
 resetResultBtn.addEventListener('click', resetResultView);
 downloadResultBtn.addEventListener('click', downloadResult);
+if (forceRefreshBtn) {
+  forceRefreshBtn.addEventListener('click', () => handleTryOnExecution(true));
+}
+if (refreshClosetBtn) {
+  refreshClosetBtn.addEventListener('click', () => {
+    if (state.activeProfileId) loadClosetHistory(state.activeProfileId);
+  });
+}
 
 // --- 7. Initialization ---
+
 
 async function init() {
   await checkBackendHealth();

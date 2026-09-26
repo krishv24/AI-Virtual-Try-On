@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, s
 
 from app.database import get_db
 from app.config import settings
+from app.services.catvton_service import catvton_service
 from app.models.schemas import (
     ProfileCreate,
     ProfileUpdate,
@@ -40,23 +41,30 @@ def format_photo_response(row: sqlite3.Row) -> ProfilePhotoResponse:
 
 @router.post("", response_model=ProfileResponse, status_code=status.HTTP_201_CREATED)
 def create_profile(payload: ProfileCreate, conn: sqlite3.Connection = Depends(get_db)):
-    """Create a new user reference profile."""
+    """Create a new user reference profile with explicit consent confirmation."""
     now = datetime.now(timezone.utc).isoformat()
     cursor = conn.cursor()
+    consent_val = 1 if payload.consent_no_training else 0
     cursor.execute(
-        "INSERT INTO profiles (name, created_at) VALUES (?, ?);",
-        (payload.name.strip(), now),
+        "INSERT INTO profiles (name, consent_no_training, created_at) VALUES (?, ?, ?);",
+        (payload.name.strip(), consent_val, now),
     )
     profile_id = cursor.lastrowid
-    return ProfileResponse(id=profile_id, name=payload.name.strip(), created_at=now, photo_count=0)
+    return ProfileResponse(
+        id=profile_id,
+        name=payload.name.strip(),
+        consent_no_training=bool(consent_val),
+        created_at=now,
+        photo_count=0,
+    )
 
 
 @router.get("", response_model=List[ProfileResponse])
 def list_profiles(conn: sqlite3.Connection = Depends(get_db)):
-    """List all profiles with their photo counts."""
+    """List all profiles with their photo counts and consent status."""
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT p.id, p.name, p.created_at, COUNT(ph.id) AS photo_count
+        SELECT p.id, p.name, p.consent_no_training, p.created_at, COUNT(ph.id) AS photo_count
         FROM profiles p
         LEFT JOIN profile_photos ph ON p.id = ph.profile_id
         GROUP BY p.id
@@ -67,6 +75,7 @@ def list_profiles(conn: sqlite3.Connection = Depends(get_db)):
         ProfileResponse(
             id=row["id"],
             name=row["name"],
+            consent_no_training=bool(row["consent_no_training"] if "consent_no_training" in row.keys() else 1),
             created_at=row["created_at"],
             photo_count=row["photo_count"],
         )
@@ -78,7 +87,7 @@ def list_profiles(conn: sqlite3.Connection = Depends(get_db)):
 def get_profile(profile_id: int, conn: sqlite3.Connection = Depends(get_db)):
     """Get a specific profile along with its uploaded reference photos."""
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, created_at FROM profiles WHERE id = ?;", (profile_id,))
+    cursor.execute("SELECT id, name, consent_no_training, created_at FROM profiles WHERE id = ?;", (profile_id,))
     profile_row = cursor.fetchone()
     if not profile_row:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -92,6 +101,7 @@ def get_profile(profile_id: int, conn: sqlite3.Connection = Depends(get_db)):
     return ProfileDetailResponse(
         id=profile_row["id"],
         name=profile_row["name"],
+        consent_no_training=bool(profile_row["consent_no_training"] if "consent_no_training" in profile_row.keys() else 1),
         created_at=profile_row["created_at"],
         photos=[format_photo_response(p) for p in photo_rows],
     )
@@ -101,7 +111,7 @@ def get_profile(profile_id: int, conn: sqlite3.Connection = Depends(get_db)):
 def update_profile(profile_id: int, payload: ProfileUpdate, conn: sqlite3.Connection = Depends(get_db)):
     """Update profile name."""
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, created_at FROM profiles WHERE id = ?;", (profile_id,))
+    cursor.execute("SELECT id, name, consent_no_training, created_at FROM profiles WHERE id = ?;", (profile_id,))
     profile_row = cursor.fetchone()
     if not profile_row:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -117,6 +127,7 @@ def update_profile(profile_id: int, payload: ProfileUpdate, conn: sqlite3.Connec
     return ProfileResponse(
         id=profile_id,
         name=payload.name.strip(),
+        consent_no_training=bool(profile_row["consent_no_training"] if "consent_no_training" in profile_row.keys() else 1),
         created_at=profile_row["created_at"],
         photo_count=photo_count,
     )
@@ -124,13 +135,28 @@ def update_profile(profile_id: int, payload: ProfileUpdate, conn: sqlite3.Connec
 
 @router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_profile(profile_id: int, conn: sqlite3.Connection = Depends(get_db)):
-    """Delete a profile and purge all its stored photo files from the non-public disk."""
+    """
+    Phase 11 Privacy Right-to-be-Forgotten:
+    Delete profile and purge all associated reference photos AND synthesized tryon result images
+    from the non-public private disk storage.
+    """
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM profiles WHERE id = ?;", (profile_id,))
     if not cursor.fetchone():
         raise HTTPException(status_code=404, detail="Profile not found")
 
-    # Fetch all photo files for this profile to delete from disk
+    # 1. Fetch and purge all try-on result files for this profile from disk
+    cursor.execute("SELECT image_path FROM tryon_results WHERE profile_id = ?;", (profile_id,))
+    tryons = cursor.fetchall()
+    for t in tryons:
+        t_path = Path(t["image_path"])
+        if t_path.exists():
+            try:
+                t_path.unlink()
+            except OSError:
+                pass
+
+    # 2. Fetch and purge all reference photo files for this profile from disk
     cursor.execute("SELECT file_path FROM profile_photos WHERE profile_id = ?;", (profile_id,))
     photos = cursor.fetchall()
     for p in photos:
@@ -141,9 +167,11 @@ def delete_profile(profile_id: int, conn: sqlite3.Connection = Depends(get_db)):
             except OSError:
                 pass
 
-    # Cascading delete removes profile_photos & tryon_results records
+    # 3. Cascading delete removes database rows in profiles, profile_photos, and tryon_results
     cursor.execute("DELETE FROM profiles WHERE id = ?;", (profile_id,))
+    catvton_service.invalidate_photo_cache(profile_id)
     return None
+
 
 
 # --- Profile Photos Endpoints ---
@@ -223,6 +251,7 @@ async def upload_profile_photo(
         (profile_id, photo_type.value, str(destination_path), now),
     )
     photo_id = cursor.lastrowid
+    catvton_service.invalidate_photo_cache(profile_id)
 
     return ProfilePhotoResponse(
         id=photo_id,

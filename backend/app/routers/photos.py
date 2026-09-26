@@ -6,8 +6,10 @@ from fastapi.responses import FileResponse
 
 from app.database import get_db
 from app.models.schemas import ProfilePhotoResponse, PhotoType
+from app.services.catvton_service import catvton_service
 
 router = APIRouter(prefix="/api/photos", tags=["Photos"])
+
 
 @router.get("/{photo_id}", response_model=ProfilePhotoResponse)
 def get_photo_metadata(photo_id: int, conn: sqlite3.Connection = Depends(get_db)):
@@ -65,7 +67,7 @@ def get_photo_file(photo_id: int, conn: sqlite3.Connection = Depends(get_db)):
 def delete_photo(photo_id: int, conn: sqlite3.Connection = Depends(get_db)):
     """Delete a photo record and remove the file from private disk."""
     cursor = conn.cursor()
-    cursor.execute("SELECT file_path FROM profile_photos WHERE id = ?;", (photo_id,))
+    cursor.execute("SELECT profile_id, file_path FROM profile_photos WHERE id = ?;", (photo_id,))
     row = cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Photo not found")
@@ -78,4 +80,6 @@ def delete_photo(photo_id: int, conn: sqlite3.Connection = Depends(get_db)):
             pass
 
     cursor.execute("DELETE FROM profile_photos WHERE id = ?;", (photo_id,))
+    catvton_service.invalidate_photo_cache(row["profile_id"])
     return None
+
