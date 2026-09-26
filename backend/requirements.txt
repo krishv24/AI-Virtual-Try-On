@@ -12,7 +12,12 @@ mediapipe>=1.0.0
 pillow>=10.0.0
 numpy>=1.26.0
 
+# Hugging Face & Virtual Try-On Client (Phase 6 ZeroGPU Space)
+gradio_client>=1.0.0
+huggingface_hub>=0.20.0
+
 # Future Phases (Refer to techstack.txt):
 # - DB: sqlite3 (Python built-in)
 # - CLIP category classification: transformers / open_clip_torch
 # - Styling LLM: groq / google-generativeai (free tier)
+
