@@ -31,16 +31,33 @@
           <div class="header-left">
             <span class="section-icon">👤</span>
             <span class="card-title">Digital Profile</span>
+            <span id="active-profile-name-badge" class="profile-active-tag">Active</span>
           </div>
-          <button id="sp-manage-profiles-btn" class="text-btn" title="Open Profile Studio">
-            + Manage
-          </button>
+          <div class="header-actions">
+            <button id="sp-quick-add-profile-btn" class="icon-action-btn" title="Quick Add New Profile">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"></path>
+              </svg>
+            </button>
+            <button id="sp-manage-profiles-btn" class="text-btn" title="Open Full Profile Studio">
+              Manage
+            </button>
+          </div>
         </div>
 
         <div class="profile-control-row">
           <select id="sp-profile-select" class="sp-dropdown">
             <option value="" disabled selected>Loading profiles...</option>
           </select>
+        </div>
+
+        <!-- Quick Profile Creation Inline Strip (hidden by default) -->
+        <div id="quick-profile-creator" class="quick-profile-creator hidden">
+          <input type="text" id="quick-profile-name-input" placeholder="New profile name (e.g. Jordan)" class="sp-text-input">
+          <div class="quick-profile-actions">
+            <button id="quick-profile-save-btn" class="accent-btn mini-btn">Create & Switch</button>
+            <button id="quick-profile-cancel-btn" class="text-btn mini-btn">Cancel</button>
+          </div>
         </div>
 
         <!-- Active Model Preview & Angle Tabs -->
@@ -217,16 +234,26 @@
         <div class="card-header">
           <div class="header-left">
             <span class="section-icon">🧥</span>
-            <span class="card-title">My Closet</span>
+            <span class="card-title">Virtual Wardrobe</span>
             <span id="closet-count-badge" class="count-badge">0</span>
           </div>
           <div class="header-actions">
-            <button id="refresh-closet-btn" class="icon-action-btn" title="Refresh closet fittings">
+            <button id="refresh-closet-btn" class="icon-action-btn" title="Refresh wardrobe fittings">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
               </svg>
             </button>
           </div>
+        </div>
+
+        <!-- Virtual Wardrobe Category Filter Bar -->
+        <div class="closet-filters-bar" id="closet-filters-bar">
+          <button class="closet-filter-chip active" data-cat="all">All <span class="chip-count" id="chip-count-all">0</span></button>
+          <button class="closet-filter-chip" data-cat="tops">Tops <span class="chip-count" id="chip-count-tops">0</span></button>
+          <button class="closet-filter-chip" data-cat="bottoms">Bottoms <span class="chip-count" id="chip-count-bottoms">0</span></button>
+          <button class="closet-filter-chip" data-cat="dresses">Dresses <span class="chip-count" id="chip-count-dresses">0</span></button>
+          <button class="closet-filter-chip" data-cat="shoes">Shoes <span class="chip-count" id="chip-count-shoes">0</span></button>
+          <button class="closet-filter-chip" data-cat="accessories">Accessories <span class="chip-count" id="chip-count-accessories">0</span></button>
         </div>
 
         <div class="closet-viewport" id="closet-viewport">
@@ -237,16 +264,140 @@
                 <path d="M3 6h18M3 12h18M3 18h18"></path>
               </svg>
             </div>
-            <h4>Closet is Empty</h4>
-            <p>Past fittings for this profile are saved here and cached for instant preview.</p>
+            <h4 id="closet-empty-title">Wardrobe is Empty</h4>
+            <p id="closet-empty-subtext">Past fittings for this profile are saved here and browsable by category.</p>
           </div>
 
           <!-- Closet Grid -->
           <div id="closet-grid" class="closet-grid hidden"></div>
         </div>
       </section>
+
+      <!-- Sticky Side-by-Side Comparison Dock -->
+      <div id="compare-dock" class="compare-dock hidden">
+        <div class="compare-dock-header">
+          <div class="dock-title-wrap">
+            <span class="dock-icon">⚖️</span>
+            <strong>Side-by-Side Compare</strong>
+            <span id="compare-dock-count" class="count-badge">0/2</span>
+          </div>
+          <button id="compare-clear-btn" class="mini-text-btn" title="Clear staged items">Clear</button>
+        </div>
+        <div class="compare-dock-body">
+          <div class="compare-slot" id="slot-a-card">
+            <span class="slot-tag tag-a">Look A</span>
+            <span id="slot-a-name" class="slot-name">Select 1st garment</span>
+            <button id="slot-a-remove" class="slot-remove-btn hidden">&times;</button>
+          </div>
+          <div class="compare-vs-badge">VS</div>
+          <div class="compare-slot" id="slot-b-card">
+            <span class="slot-tag tag-b">Look B</span>
+            <span id="slot-b-name" class="slot-name">Select 2nd garment</span>
+            <button id="slot-b-remove" class="slot-remove-btn hidden">&times;</button>
+          </div>
+        </div>
+        <button id="launch-compare-btn" class="compare-launch-btn" disabled>
+          Compare Looks Side-by-Side
+        </button>
+      </div>
     </main>
 
+    <!-- 6. Full Side-by-Side Comparison Modal -->
+    <div id="compare-modal" class="compare-modal-overlay hidden">
+      <div class="compare-modal-card">
+        <div class="compare-modal-header">
+          <div class="compare-header-left">
+            <span class="compare-icon">⚖️</span>
+            <div>
+              <h3>Side-by-Side Comparison</h3>
+              <p class="modal-sub">Compare drape, fit, and color fidelity across two garments on your model</p>
+            </div>
+          </div>
+          <div class="compare-controls">
+            <div class="compare-view-toggles">
+              <button class="compare-toggle-btn active" id="toggle-dual-mode">Dual View</button>
+              <button class="compare-toggle-btn" id="toggle-slider-mode">Interactive Split</button>
+            </div>
+            <button id="close-compare-modal-btn" class="modal-close-btn">&times;</button>
+          </div>
+        </div>
+
+        <div class="compare-modal-content">
+          <!-- View 1: Dual Side-by-Side View -->
+          <div id="compare-dual-view" class="compare-dual-view">
+            <!-- Left: Look A -->
+            <div class="compare-look-panel" id="panel-look-a">
+              <div class="look-header">
+                <span class="look-badge badge-a">Look A</span>
+                <span id="comp-title-a" class="look-title">Garment A</span>
+              </div>
+              <div class="look-visual">
+                <img id="comp-img-a" src="" alt="Look A" class="compare-result-img">
+                <div id="comp-loading-a" class="compare-loading-overlay hidden">
+                  <div class="spinner-small"></div>
+                  <span>Generating Look A...</span>
+                </div>
+              </div>
+              <div class="look-meta-footer">
+                <span id="comp-score-a" class="accuracy-score-pill">97% Match</span>
+                <span id="comp-cat-a" class="category-pill">Tops</span>
+                <button id="comp-run-a" class="mini-btn accent-btn hidden">⚡ Generate Look A</button>
+              </div>
+            </div>
+
+            <div class="compare-central-divider">
+              <span class="vs-circle">VS</span>
+            </div>
+
+            <!-- Right: Look B -->
+            <div class="compare-look-panel" id="panel-look-b">
+              <div class="look-header">
+                <span class="look-badge badge-b">Look B</span>
+                <span id="comp-title-b" class="look-title">Garment B</span>
+              </div>
+              <div class="look-visual">
+                <img id="comp-img-b" src="" alt="Look B" class="compare-result-img">
+                <div id="comp-loading-b" class="compare-loading-overlay hidden">
+                  <div class="spinner-small"></div>
+                  <span>Generating Look B...</span>
+                </div>
+              </div>
+              <div class="look-meta-footer">
+                <span id="comp-score-b" class="accuracy-score-pill">95% Match</span>
+                <span id="comp-cat-b" class="category-pill">Tops</span>
+                <button id="comp-run-b" class="mini-btn accent-btn hidden">⚡ Generate Look B</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- View 2: Interactive Split Slider View -->
+          <div id="compare-slider-view" class="compare-slider-view hidden">
+            <div class="split-slider-container" id="split-slider-container">
+              <!-- Background Image (Look B) -->
+              <img id="slider-img-bg" class="slider-image slider-bg" src="" alt="Look B">
+
+              <!-- Foreground Clipped Image (Look A) -->
+              <div class="slider-fg-container" id="slider-fg-container" style="width: 50%;">
+                <img id="slider-img-fg" class="slider-image slider-fg" src="" alt="Look A">
+              </div>
+
+              <!-- Draggable Divider Line -->
+              <div class="slider-divider-line" id="slider-divider-line" style="left: 50%;">
+                <div class="slider-divider-knob">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M8 7l-5 5 5 5V7zm8 0v10l5-5-5-5z"></path>
+                  </svg>
+                </div>
+              </div>
+
+              <span class="slider-tag-pill left-tag">Look A</span>
+              <span class="slider-tag-pill right-tag">Look B</span>
+            </div>
+            <p class="slider-instruction">← Drag slider left or right to seamlessly compare fabric drape and fit over your digital model →</p>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Footer Notice -->
     <footer class="studio-footer">

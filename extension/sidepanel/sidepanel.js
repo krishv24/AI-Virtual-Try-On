@@ -45,6 +45,12 @@ let state = {
   selectedProductId: null,
   isProcessing: false,
   closetItems: [],
+  activeClosetCategory: 'all',
+  compareSlots: {
+    lookA: null,
+    lookB: null,
+  },
+  compareMode: 'dual',
 };
 
 // DOM References
@@ -56,6 +62,14 @@ const spGoUploadBtn = document.getElementById('sp-go-upload-btn');
 const activeModelImg = document.getElementById('active-model-img');
 const modelEmptyState = document.getElementById('model-empty-state');
 const angleChips = document.getElementById('angle-chips');
+
+// Bonus Feature 2: Quick Profile Controls
+const activeProfileNameBadge = document.getElementById('active-profile-name-badge');
+const spQuickAddProfileBtn = document.getElementById('sp-quick-add-profile-btn');
+const quickProfileCreator = document.getElementById('quick-profile-creator');
+const quickProfileNameInput = document.getElementById('quick-profile-name-input');
+const quickProfileSaveBtn = document.getElementById('quick-profile-save-btn');
+const quickProfileCancelBtn = document.getElementById('quick-profile-cancel-btn');
 
 const productCountBadge = document.getElementById('product-count-badge');
 const scanPageBtn = document.getElementById('scan-page-btn');
@@ -87,11 +101,14 @@ const lowConfidenceReason = document.getElementById('low-confidence-reason');
 const resultCachedBadge = document.getElementById('result-cached-badge');
 const forceRefreshBtn = document.getElementById('force-refresh-btn');
 
-// Closet Wardrobe References
+// Bonus Feature 1: Virtual Wardrobe References
 const closetCountBadge = document.getElementById('closet-count-badge');
 const refreshClosetBtn = document.getElementById('refresh-closet-btn');
 const closetEmptyState = document.getElementById('closet-empty-state');
+const closetEmptyTitle = document.getElementById('closet-empty-title');
+const closetEmptySubtext = document.getElementById('closet-empty-subtext');
 const closetGrid = document.getElementById('closet-grid');
+const closetFiltersBar = document.getElementById('closet-filters-bar');
 
 // Phase 12 Progress & Error Notice References
 const processingTimer = document.getElementById('processing-timer');
@@ -103,6 +120,45 @@ const errorCardBadge = document.getElementById('error-card-badge');
 const errorCardMessage = document.getElementById('error-card-message');
 const errorActionBtn = document.getElementById('error-action-btn');
 const errorDismissBtn = document.getElementById('error-dismiss-btn');
+
+// Bonus Feature 4: Side-by-Side Comparison Dock & Modal References
+const compareDock = document.getElementById('compare-dock');
+const compareDockCount = document.getElementById('compare-dock-count');
+const compareClearBtn = document.getElementById('compare-clear-btn');
+const slotACard = document.getElementById('slot-a-card');
+const slotAName = document.getElementById('slot-a-name');
+const slotARemove = document.getElementById('slot-a-remove');
+const slotBCard = document.getElementById('slot-b-card');
+const slotBName = document.getElementById('slot-b-name');
+const slotBRemove = document.getElementById('slot-b-remove');
+const launchCompareBtn = document.getElementById('launch-compare-btn');
+
+const compareModal = document.getElementById('compare-modal');
+const closeCompareModalBtn = document.getElementById('close-compare-modal-btn');
+const toggleDualMode = document.getElementById('toggle-dual-mode');
+const toggleSliderMode = document.getElementById('toggle-slider-mode');
+const compareDualView = document.getElementById('compare-dual-view');
+const compareSliderView = document.getElementById('compare-slider-view');
+
+const compTitleA = document.getElementById('comp-title-a');
+const compImgA = document.getElementById('comp-img-a');
+const compScoreA = document.getElementById('comp-score-a');
+const compCatA = document.getElementById('comp-cat-a');
+const compLoadingA = document.getElementById('comp-loading-a');
+const compRunA = document.getElementById('comp-run-a');
+
+const compTitleB = document.getElementById('comp-title-b');
+const compImgB = document.getElementById('comp-img-b');
+const compScoreB = document.getElementById('comp-score-b');
+const compCatB = document.getElementById('comp-cat-b');
+const compLoadingB = document.getElementById('comp-loading-b');
+const compRunB = document.getElementById('comp-run-b');
+
+const splitSliderContainer = document.getElementById('split-slider-container');
+const sliderImgBg = document.getElementById('slider-img-bg');
+const sliderImgFg = document.getElementById('slider-img-fg');
+const sliderFgContainer = document.getElementById('slider-fg-container');
+const sliderDividerLine = document.getElementById('slider-divider-line');
 
 // --- 1. Lightweight Storage Sync Helpers ---
 
@@ -178,11 +234,58 @@ async function loadActiveProfileData(profileId) {
     const res = await fetch(`${BACKEND_BASE}/api/profiles/${profileId}`);
     if (!res.ok) return;
     state.activeProfileData = await res.json();
+    if (activeProfileNameBadge) {
+      activeProfileNameBadge.textContent = state.activeProfileData?.name || 'Active';
+    }
     renderModelPhoto();
     updateTryOnButtonState();
     await loadClosetHistory(profileId);
   } catch (err) {
     console.warn('[AI Try-On] Error loading profile detail:', err);
+  }
+}
+
+function toggleQuickProfileCreator(show) {
+  if (!quickProfileCreator) return;
+  if (show === undefined) {
+    quickProfileCreator.classList.toggle('hidden');
+  } else if (show) {
+    quickProfileCreator.classList.remove('hidden');
+    if (quickProfileNameInput) quickProfileNameInput.focus();
+  } else {
+    quickProfileCreator.classList.add('hidden');
+    if (quickProfileNameInput) quickProfileNameInput.value = '';
+  }
+}
+
+async function handleQuickCreateProfile() {
+  const name = quickProfileNameInput ? quickProfileNameInput.value.trim() : '';
+  if (!name) {
+    if (quickProfileNameInput) quickProfileNameInput.focus();
+    return;
+  }
+
+  try {
+    const res = await fetch(`${BACKEND_BASE}/api/profiles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, consent_no_training: true }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Could not create profile');
+    }
+
+    const newProfile = await res.json();
+    toggleQuickProfileCreator(false);
+    await loadProfiles();
+    state.activeProfileId = newProfile.id;
+    if (spProfileSelect) spProfileSelect.value = newProfile.id;
+    setStoredState({ activeProfileId: newProfile.id });
+    await loadActiveProfileData(newProfile.id);
+  } catch (err) {
+    alert(`Could not create profile: ${err.message}`);
   }
 }
 
@@ -269,20 +372,24 @@ function renderProducts() {
       state.variantSelections[prod.id] = autoFrontShot || images[0];
     }
 
-    const currentImg = state.variantSelections[prod.id];
     const isSelected = state.selectedProductId === prod.id;
+    const isStaged = isStagedForCompare(prod.id);
 
     const card = document.createElement('div');
     card.className = `product-card ${isSelected ? 'selected' : ''}`;
     card.dataset.id = prod.id;
 
     card.innerHTML = `
+      ${images.length > 1 ? '<span class="auto-front-badge" title="Auto-selected front-facing angle">✨ Front Shot</span>' : ''}
       <img src="${currentImg}" alt="${prod.title}" class="product-thumb" id="sp-thumb-${prod.id}" loading="lazy">
       <div class="product-meta">
         <span class="product-name" title="${prod.title}">${prod.title}</span>
         <div class="product-tags">
           <span class="category-tag">${prod.category || 'Apparel'}</span>
           <span class="product-price">${prod.price || ''}</span>
+          <button class="card-compare-btn ${isStaged ? 'staged' : ''}" data-compare-id="${prod.id}" title="Stage for side-by-side comparison">
+            ${isStaged ? '✓ In Compare' : '⚖️ Compare'}
+          </button>
         </div>
       </div>
     `;
@@ -316,6 +423,21 @@ function renderProducts() {
       });
 
       card.appendChild(variantStrip);
+    }
+
+    // Compare button click handler
+    const compBtn = card.querySelector('.card-compare-btn');
+    if (compBtn) {
+      compBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        stageItemForComparison({
+          id: prod.id,
+          title: prod.title,
+          category: prod.category || 'Apparel',
+          price: prod.price || '',
+          imageUrl: currentImg,
+        });
+      });
     }
 
     card.addEventListener('click', () => selectProduct(prod.id, currentImg));
@@ -838,7 +960,17 @@ function downloadResult() {
   link.click();
 }
 
-// --- 5.5 Closet / Wardrobe History ---
+// --- 5.5 Virtual Wardrobe (Category Browsable Gallery) & Comparison Staging ---
+
+function normalizeCategoryGroup(cat) {
+  if (!cat) return 'tops';
+  const c = cat.toLowerCase();
+  if (c.includes('pant') || c.includes('trouser') || c.includes('jean') || c.includes('short') || c.includes('skirt') || c.includes('lower') || c.includes('bottom')) return 'bottoms';
+  if (c.includes('dress') || c.includes('gown') || c.includes('robe') || c.includes('frock')) return 'dresses';
+  if (c.includes('shoe') || c.includes('sneaker') || c.includes('boot') || c.includes('footwear') || c.includes('heel') || c.includes('sandal')) return 'shoes';
+  if (c.includes('neck') || c.includes('jewel') || c.includes('ring') || c.includes('earring') || c.includes('watch') || c.includes('bag') || c.includes('access')) return 'accessories';
+  return 'tops';
+}
 
 async function loadClosetHistory(profileId) {
   if (!profileId) return;
@@ -853,12 +985,59 @@ async function loadClosetHistory(profileId) {
   }
 }
 
+async function deleteWardrobeItem(resultId) {
+  if (!confirm('Remove this try-on fitting from your virtual wardrobe?')) return;
+  try {
+    const res = await fetch(`${BACKEND_BASE}/api/tryon/results/${resultId}`, { method: 'DELETE' });
+    if (res.ok || res.status === 204) {
+      state.closetItems = state.closetItems.filter((i) => i.id !== resultId);
+      if (state.compareSlots.lookA && state.compareSlots.lookA.resultId === resultId) state.compareSlots.lookA = null;
+      if (state.compareSlots.lookB && state.compareSlots.lookB.resultId === resultId) state.compareSlots.lookB = null;
+      renderCompareDock();
+      renderCloset();
+    }
+  } catch (err) {
+    console.error('Error deleting wardrobe item:', err);
+  }
+}
+
 function renderCloset() {
   if (!closetCountBadge || !closetEmptyState || !closetGrid) return;
   const items = state.closetItems || [];
   closetCountBadge.textContent = items.length;
 
+  // Update Category Chip Counts
+  const counts = {
+    all: items.length,
+    tops: items.filter((i) => normalizeCategoryGroup(i.category) === 'tops').length,
+    bottoms: items.filter((i) => normalizeCategoryGroup(i.category) === 'bottoms').length,
+    dresses: items.filter((i) => normalizeCategoryGroup(i.category) === 'dresses').length,
+    shoes: items.filter((i) => normalizeCategoryGroup(i.category) === 'shoes').length,
+    accessories: items.filter((i) => normalizeCategoryGroup(i.category) === 'accessories').length,
+  };
+
+  Object.entries(counts).forEach(([cat, num]) => {
+    const el = document.getElementById(`chip-count-${cat}`);
+    if (el) el.textContent = num;
+  });
+
+  const filteredItems = state.activeClosetCategory === 'all'
+    ? items
+    : items.filter((i) => normalizeCategoryGroup(i.category) === state.activeClosetCategory);
+
   if (items.length === 0) {
+    if (closetEmptyTitle) closetEmptyTitle.textContent = 'Wardrobe is Empty';
+    if (closetEmptySubtext) closetEmptySubtext.textContent = 'Past fittings for this profile are saved here and cached for instant preview.';
+    closetEmptyState.classList.remove('hidden');
+    closetGrid.classList.add('hidden');
+    closetGrid.innerHTML = '';
+    return;
+  }
+
+  if (filteredItems.length === 0) {
+    const catLabel = state.activeClosetCategory.charAt(0).toUpperCase() + state.activeClosetCategory.slice(1);
+    if (closetEmptyTitle) closetEmptyTitle.textContent = `No Saved ${catLabel}`;
+    if (closetEmptySubtext) closetEmptySubtext.textContent = `You don't have any saved try-ons in the ${catLabel} collection yet.`;
     closetEmptyState.classList.remove('hidden');
     closetGrid.classList.add('hidden');
     closetGrid.innerHTML = '';
@@ -869,18 +1048,24 @@ function renderCloset() {
   closetGrid.classList.remove('hidden');
   closetGrid.innerHTML = '';
 
-  items.forEach((item) => {
+  filteredItems.forEach((item) => {
     const card = document.createElement('div');
     card.className = 'closet-item';
     card.title = `Click to view fitting for ${item.product_title || item.category}`;
 
     const scorePct = Math.round((item.accuracy_score || 0.9) * 100);
     const isLow = item.is_low_confidence;
+    const isStaged = isStagedForCompare(item.product_id || item.id);
 
     card.innerHTML = `
       <div class="closet-thumb-wrap">
         <img class="closet-thumb" src="${BACKEND_BASE}${item.access_url}" alt="${item.category}" loading="lazy">
         <span class="closet-item-badge ${isLow ? 'low' : ''}">${isLow ? '⚠️ Low' : `${scorePct}%`}</span>
+        <div class="closet-item-actions">
+          <button class="closet-action-icon-btn view-btn" title="View Result">👁️</button>
+          <button class="closet-action-icon-btn compare-btn ${isStaged ? 'staged' : ''}" title="Stage for Compare">⚖️</button>
+          <button class="closet-action-icon-btn delete-btn" title="Remove from Wardrobe">🗑️</button>
+        </div>
       </div>
       <div class="closet-item-info">
         <span class="closet-item-title">${item.product_title || `${item.category.toUpperCase()} Fitting`}</span>
@@ -891,17 +1076,297 @@ function renderCloset() {
       </div>
     `;
 
+    const mockProd = {
+      id: item.product_id || 9999,
+      title: item.product_title || `${item.category.toUpperCase()} Fitting`,
+      category: item.category,
+      imageUrl: item.garment_image_url || `${BACKEND_BASE}${item.access_url}`,
+    };
+
+    const viewBtn = card.querySelector('.view-btn');
+    if (viewBtn) {
+      viewBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showResultView(mockProd, item);
+      });
+    }
+
+    const compBtn = card.querySelector('.compare-btn');
+    if (compBtn) {
+      compBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        stageItemForComparison({
+          id: item.product_id || item.id,
+          resultId: item.id,
+          title: item.product_title || `${item.category} Fitting`,
+          category: item.category,
+          imageUrl: item.garment_image_url || `${BACKEND_BASE}${item.access_url}`,
+          tryonUrl: `${BACKEND_BASE}${item.access_url}`,
+          accuracy_score: item.accuracy_score,
+        });
+      });
+    }
+
+    const delBtn = card.querySelector('.delete-btn');
+    if (delBtn) {
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteWardrobeItem(item.id);
+      });
+    }
+
     card.addEventListener('click', () => {
-      const mockProd = {
-        id: item.product_id || 9999,
-        title: item.product_title || `${item.category.toUpperCase()} Fitting`,
-        category: item.category,
-        imageUrl: item.garment_image_url || `${BACKEND_BASE}${item.access_url}`,
-      };
       showResultView(mockProd, item);
     });
 
     closetGrid.appendChild(card);
+  });
+}
+
+// --- 5.6 Side-by-Side Comparison Methods ---
+
+function isStagedForCompare(id) {
+  if (!id) return false;
+  return (state.compareSlots.lookA && state.compareSlots.lookA.id === id) ||
+         (state.compareSlots.lookB && state.compareSlots.lookB.id === id);
+}
+
+function stageItemForComparison(item) {
+  if (!item) return;
+
+  if (state.compareSlots.lookA && state.compareSlots.lookA.id === item.id) {
+    state.compareSlots.lookA = null;
+  } else if (state.compareSlots.lookB && state.compareSlots.lookB.id === item.id) {
+    state.compareSlots.lookB = null;
+  } else if (!state.compareSlots.lookA) {
+    state.compareSlots.lookA = item;
+  } else if (!state.compareSlots.lookB) {
+    state.compareSlots.lookB = item;
+  } else {
+    state.compareSlots.lookB = item;
+  }
+
+  renderCompareDock();
+  renderProducts();
+  renderCloset();
+}
+
+function clearCompareSlots() {
+  state.compareSlots.lookA = null;
+  state.compareSlots.lookB = null;
+  renderCompareDock();
+  renderProducts();
+  renderCloset();
+}
+
+function renderCompareDock() {
+  if (!compareDock) return;
+  const count = (state.compareSlots.lookA ? 1 : 0) + (state.compareSlots.lookB ? 1 : 0);
+  if (compareDockCount) compareDockCount.textContent = `${count}/2`;
+
+  if (count === 0) {
+    compareDock.classList.add('hidden');
+    return;
+  }
+
+  compareDock.classList.remove('hidden');
+
+  if (state.compareSlots.lookA) {
+    slotACard.classList.add('filled');
+    slotAName.textContent = state.compareSlots.lookA.title || 'Look A';
+    slotARemove.classList.remove('hidden');
+    slotARemove.onclick = (e) => {
+      e.stopPropagation();
+      state.compareSlots.lookA = null;
+      renderCompareDock();
+      renderProducts();
+      renderCloset();
+    };
+  } else {
+    slotACard.classList.remove('filled');
+    slotAName.textContent = 'Select 1st garment';
+    slotARemove.classList.add('hidden');
+  }
+
+  if (state.compareSlots.lookB) {
+    slotBCard.classList.add('filled');
+    slotBName.textContent = state.compareSlots.lookB.title || 'Look B';
+    slotBRemove.classList.remove('hidden');
+    slotBRemove.onclick = (e) => {
+      e.stopPropagation();
+      state.compareSlots.lookB = null;
+      renderCompareDock();
+      renderProducts();
+      renderCloset();
+    };
+  } else {
+    slotBCard.classList.remove('filled');
+    slotBName.textContent = 'Select 2nd garment';
+    slotBRemove.classList.add('hidden');
+  }
+
+  if (launchCompareBtn) {
+    launchCompareBtn.disabled = count < 2;
+    launchCompareBtn.textContent = count < 2
+      ? `Select 1 more item to compare (${count}/2)`
+      : `Compare Looks Side-by-Side (2)`;
+  }
+}
+
+function openCompareModal() {
+  if (!compareModal || !state.compareSlots.lookA || !state.compareSlots.lookB) return;
+  compareModal.classList.remove('hidden');
+
+  const itemA = state.compareSlots.lookA;
+  const itemB = state.compareSlots.lookB;
+
+  compTitleA.textContent = itemA.title || 'Garment A';
+  compCatA.textContent = itemA.category || 'Apparel';
+  const imgUrlA = itemA.tryonUrl || (itemA.access_url ? `${BACKEND_BASE}${itemA.access_url}` : null);
+  if (imgUrlA) {
+    compImgA.src = imgUrlA;
+    compScoreA.textContent = itemA.accuracy_score ? `${Math.round(itemA.accuracy_score * 100)}% Match` : '97% Match';
+    compScoreA.classList.remove('hidden');
+    compRunA.classList.add('hidden');
+  } else {
+    compImgA.src = itemA.imageUrl || state.activeModelPhotoUrl || '';
+    compScoreA.classList.add('hidden');
+    compRunA.classList.remove('hidden');
+    compRunA.onclick = () => runComparisonSlotTryOn('A');
+  }
+
+  compTitleB.textContent = itemB.title || 'Garment B';
+  compCatB.textContent = itemB.category || 'Apparel';
+  const imgUrlB = itemB.tryonUrl || (itemB.access_url ? `${BACKEND_BASE}${itemB.access_url}` : null);
+  if (imgUrlB) {
+    compImgB.src = imgUrlB;
+    compScoreB.textContent = itemB.accuracy_score ? `${Math.round(itemB.accuracy_score * 100)}% Match` : '95% Match';
+    compScoreB.classList.remove('hidden');
+    compRunB.classList.add('hidden');
+  } else {
+    compImgB.src = itemB.imageUrl || state.activeModelPhotoUrl || '';
+    compScoreB.classList.add('hidden');
+    compRunB.classList.remove('hidden');
+    compRunB.onclick = () => runComparisonSlotTryOn('B');
+  }
+
+  sliderImgBg.src = compImgB.src;
+  sliderImgFg.src = compImgA.src;
+
+  setCompareMode('dual');
+}
+
+function closeCompareModal() {
+  if (compareModal) compareModal.classList.add('hidden');
+}
+
+function setCompareMode(mode) {
+  state.compareMode = mode;
+  if (mode === 'slider') {
+    if (toggleSliderMode) toggleSliderMode.classList.add('active');
+    if (toggleDualMode) toggleDualMode.classList.remove('active');
+    if (compareDualView) compareDualView.classList.add('hidden');
+    if (compareSliderView) compareSliderView.classList.remove('hidden');
+  } else {
+    if (toggleDualMode) toggleDualMode.classList.add('active');
+    if (toggleSliderMode) toggleSliderMode.classList.remove('active');
+    if (compareDualView) compareDualView.classList.remove('hidden');
+    if (compareSliderView) compareSliderView.classList.add('hidden');
+  }
+}
+
+async function runComparisonSlotTryOn(slotKey) {
+  const item = slotKey === 'A' ? state.compareSlots.lookA : state.compareSlots.lookB;
+  const loadingEl = slotKey === 'A' ? compLoadingA : compLoadingB;
+  const imgEl = slotKey === 'A' ? compImgA : compImgB;
+  const scoreEl = slotKey === 'A' ? compScoreA : compScoreB;
+  const btnEl = slotKey === 'A' ? compRunA : compRunB;
+
+  if (!item || !state.activeProfileId) return;
+
+  loadingEl.classList.remove('hidden');
+  btnEl.classList.add('hidden');
+
+  try {
+    const payload = {
+      profile_id: state.activeProfileId,
+      garment_image_url: item.imageUrl,
+      product_id: typeof item.id === 'number' ? item.id : null,
+      category: item.category || 'auto',
+      force_refresh: false,
+    };
+
+    const res = await fetch(`${BACKEND_BASE}/api/tryon`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    item.tryonUrl = `${BACKEND_BASE}${data.access_url}`;
+    item.accuracy_score = data.accuracy_score;
+    imgEl.src = item.tryonUrl;
+    scoreEl.textContent = `${Math.round((data.accuracy_score || 0.95) * 100)}% Match`;
+    scoreEl.classList.remove('hidden');
+
+    if (slotKey === 'A') sliderImgFg.src = item.tryonUrl;
+    else sliderImgBg.src = item.tryonUrl;
+
+    await loadClosetHistory(state.activeProfileId);
+  } catch (err) {
+    alert(`Try-on failed: ${err.message}`);
+    btnEl.classList.remove('hidden');
+  } finally {
+    loadingEl.classList.add('hidden');
+  }
+}
+
+function initSplitSlider() {
+  if (!splitSliderContainer || !sliderFgContainer || !sliderDividerLine) return;
+
+  let isDragging = false;
+
+  const updateSliderPos = (clientX) => {
+    const rect = splitSliderContainer.getBoundingClientRect();
+    let x = clientX - rect.left;
+    if (x < 0) x = 0;
+    if (x > rect.width) x = rect.width;
+    const pct = Math.max(0, Math.min(100, (x / rect.width) * 100));
+
+    sliderFgContainer.style.width = `${pct}%`;
+    sliderDividerLine.style.left = `${pct}%`;
+  };
+
+  splitSliderContainer.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    updateSliderPos(e.clientX);
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    updateSliderPos(e.clientX);
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+
+  splitSliderContainer.addEventListener('touchstart', (e) => {
+    if (e.touches && e.touches[0]) {
+      isDragging = true;
+      updateSliderPos(e.touches[0].clientX);
+    }
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (e) => {
+    if (!isDragging || !e.touches || !e.touches[0]) return;
+    updateSliderPos(e.touches[0].clientX);
+  }, { passive: true });
+
+  window.addEventListener('touchend', () => {
+    isDragging = false;
   });
 }
 
@@ -986,12 +1451,64 @@ if (errorDismissBtn) {
   errorDismissBtn.addEventListener('click', hideErrorNotice);
 }
 
+// Bonus Feature 1: Wardrobe Category Filter Chips
+if (closetFiltersBar) {
+  closetFiltersBar.querySelectorAll('.closet-filter-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      closetFiltersBar.querySelectorAll('.closet-filter-chip').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.activeClosetCategory = chip.dataset.cat;
+      renderCloset();
+    });
+  });
+}
+
+// Bonus Feature 2: Quick Profile Creator Listeners
+if (spQuickAddProfileBtn) {
+  spQuickAddProfileBtn.addEventListener('click', () => toggleQuickProfileCreator());
+}
+if (quickProfileCancelBtn) {
+  quickProfileCancelBtn.addEventListener('click', () => toggleQuickProfileCreator(false));
+}
+if (quickProfileSaveBtn) {
+  quickProfileSaveBtn.addEventListener('click', handleQuickCreateProfile);
+}
+if (quickProfileNameInput) {
+  quickProfileNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleQuickCreateProfile();
+    if (e.key === 'Escape') toggleQuickProfileCreator(false);
+  });
+}
+
+// Bonus Feature 4: Side-by-Side Compare Listeners
+if (compareClearBtn) {
+  compareClearBtn.addEventListener('click', clearCompareSlots);
+}
+if (launchCompareBtn) {
+  launchCompareBtn.addEventListener('click', openCompareModal);
+}
+if (closeCompareModalBtn) {
+  closeCompareModalBtn.addEventListener('click', closeCompareModal);
+}
+if (toggleDualMode) {
+  toggleDualMode.addEventListener('click', () => setCompareMode('dual'));
+}
+if (toggleSliderMode) {
+  toggleSliderMode.addEventListener('click', () => setCompareMode('slider'));
+}
+
+// Close compare modal when clicking outside card
+if (compareModal) {
+  compareModal.addEventListener('click', (e) => {
+    if (e.target === compareModal) closeCompareModal();
+  });
+}
 
 // --- 7. Initialization ---
 
-
 async function init() {
   await checkBackendHealth();
+  initSplitSlider();
 
   // Load stored state
   const stored = await getStoredState();

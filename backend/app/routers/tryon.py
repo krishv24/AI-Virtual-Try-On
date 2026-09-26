@@ -422,3 +422,26 @@ def get_profile_tryon_history(profile_id: int, conn: sqlite3.Connection = Depend
         )
     return results
 
+
+@router.delete("/results/{result_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tryon_result(result_id: int, conn: sqlite3.Connection = Depends(get_db)):
+    """
+    Remove a specific try-on fitting from the user's virtual wardrobe and purge disk storage.
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT image_path FROM tryon_results WHERE id = ?;", (result_id,))
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Try-on result not found")
+
+    file_path = Path(row["image_path"])
+    try:
+        if file_path.exists():
+            file_path.unlink()
+    except Exception as e:
+        logger.warning(f"Could not delete result file {file_path}: {e}")
+
+    cursor.execute("DELETE FROM tryon_results WHERE id = ?;", (result_id,))
+    conn.commit()
+    return None
+
