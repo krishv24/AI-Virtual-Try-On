@@ -401,15 +401,15 @@ async function handleTryOnExecution() {
     await delay(600);
     setStepStatus(stagePose, 'done', 'Profile pose aligned with garment drape');
 
-    // Step 3: CatVTON Neural Synthesis on ZeroGPU
-    setStepStatus(stageVton, 'active', 'Step 3: CatVTON diffusion synthesizing on ZeroGPU...');
+    // Step 3: Synthesis via Specialized Pipeline
+    setStepStatus(stageVton, 'active', 'Step 3: Running specialized try-on pipeline...');
     pipelineProgressFill.style.width = '75%';
 
     const payload = {
       profile_id: state.activeProfileId,
       garment_image_url: chosenGarmentImg,
       product_id: typeof selectedProd.id === 'number' ? selectedProd.id : null,
-      category: selectedProd.category || 'overall',
+      category: selectedProd.category || 'auto',
     };
 
     const response = await fetch(`${BACKEND_BASE}/api/tryon`, {
@@ -431,7 +431,8 @@ async function handleTryOnExecution() {
 
     const tryonResult = await response.json();
 
-    setStepStatus(stageVton, 'done', 'CatVTON ZeroGPU try-on synthesis complete!');
+    const handlerLabel = tryonResult.handler_name || 'Try-on synthesis';
+    setStepStatus(stageVton, 'done', `${handlerLabel} complete!`);
     pipelineProgressFill.style.width = '100%';
     await delay(400);
 
@@ -490,16 +491,18 @@ function showResultView(product, tryonResult = null) {
   }
 
   resultGarmentTitle.textContent = product.title;
-  resultCategoryTag.textContent = product.category || 'Apparel';
+  const displayCat = (tryonResult && tryonResult.category) ? tryonResult.category : (product.category || 'Apparel');
+  resultCategoryTag.textContent = displayCat;
 
   // Persist try-on result record (metadata only)
   setStoredState({
     lastResult: {
       productId: product.id,
       title: product.title,
-      category: product.category,
+      category: displayCat,
       selectedImageUrl: chosenImg,
       resultAccessUrl: tryonResult ? tryonResult.access_url : null,
+      handlerName: tryonResult ? tryonResult.handler_name : null,
       timestamp: new Date().toISOString(),
     },
   });

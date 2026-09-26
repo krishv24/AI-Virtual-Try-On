@@ -16,8 +16,11 @@ numpy>=1.26.0
 gradio_client>=1.0.0
 huggingface_hub>=0.20.0
 
+# Zero-Shot Product & Garment Classification (Phase 7)
+torch>=2.0.0
+transformers>=4.38.0
+
 # Future Phases (Refer to techstack.txt):
 # - DB: sqlite3 (Python built-in)
-# - CLIP category classification: transformers / open_clip_torch
 # - Styling LLM: groq / google-generativeai (free tier)
 

@@ -4,7 +4,7 @@ import sqlite3
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,11 +13,15 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import get_db
 from app.models.schemas import (
+    ClassifyRequest,
+    ClassifyResponse,
     TryOnRequest,
     TryOnResultResponse,
     TryOnStatusResponse,
 )
 from app.services.catvton_service import catvton_service
+from app.services.clip_classifier import clip_classifier
+from app.services.tryon_router import tryon_router_registry
 
 router = APIRouter(prefix="/api/tryon", tags=["Virtual Try-On"])
 
@@ -36,47 +40,111 @@ def get_tryon_status():
     )
 
 
+@router.get("/handlers")
+def list_tryon_handlers():
+    """
+    List all active plugin try-on handlers and their supported categories.
+    """
+    return {
+        "handlers": tryon_router_registry.list_handlers(),
+    }
+
+
+@router.post("/classify", response_model=ClassifyResponse)
+async def classify_product_image(request: ClassifyRequest):
+    """
+    Zero-shot CLIP classification endpoint:
+    Classifies a product image into one of the 9 target categories:
+    t-shirt/top, shirt, dress, jacket, pants/trousers, shoes, jewellery, necklace, accessory.
+    """
+    temp_dir = Path(tempfile.mkdtemp(prefix="classify_temp_"))
+    try:
+        garment_path = await catvton_service.download_garment_image(
+            request.image_url, temp_dir
+        )
+        result = clip_classifier.classify_image(
+            image_input=garment_path,
+            text_hint=request.text_hint,
+        )
+        return ClassifyResponse(
+            category=result["category"],
+            confidence=result["confidence"],
+            all_scores=result["all_scores"],
+            method=result["method"],
+        )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 @router.post("", response_model=TryOnResultResponse, status_code=status.HTTP_201_CREATED)
 async def create_tryon(
     request: TryOnRequest,
     conn: sqlite3.Connection = Depends(get_db),
 ):
     """
-    Core virtual try-on endpoint:
-    1. Fetches the appropriate profile photo for the given profile_id & garment category.
-    2. Downloads / decodes the product garment image.
-    3. Calls the CatVTON Hugging Face Space endpoint on ZeroGPU.
-    4. Saves the resulting composited image securely to private disk storage.
-    5. Records the result in the tryon_results database table and returns access URL.
+    Phase 7 Category-Aware Virtual Try-On Router:
+    1. Downloads/decodes the product garment image.
+    2. Runs CLIP classification if category is unspecified, 'auto', or 'overall'.
+    3. Selects specialized plugin handler (CatVTON ZeroGPU, Footwear, or MediaPipe Landmark Placement).
+    4. Fetches the optimal reference profile photo slot (upper_body, legs, feet, face, or front_full_body).
+    5. Executes the plugin pipeline and saves the composited result to private storage.
     """
-    # 1. Resolve profile photo
+    # 1. Determine initial category hint from request
+    effective_category = (request.category or "").strip().lower()
+    if not effective_category or effective_category in ["auto", "unknown"]:
+        effective_category = "overall"
+
+    # 2. Resolve profile photo upfront (validates profile exists and has uploaded photos)
+    handler = tryon_router_registry.get_handler(effective_category)
+    requested_type = request.photo_type or handler.get_preferred_photo_type(effective_category)
     photo_id, profile_photo_path, matched_photo_type = catvton_service.resolve_profile_photo(
         profile_id=request.profile_id,
         conn=conn,
-        category=request.category,
-        requested_type=request.photo_type,
+        category=effective_category,
+        requested_type=requested_type,
     )
 
-    # 2. Download/decode garment image in a temporary directory
     temp_dir = Path(tempfile.mkdtemp(prefix="tryon_temp_"))
     try:
+        # 3. Download/decode garment image
         garment_path = await catvton_service.download_garment_image(
             request.garment_image_url, temp_dir
         )
 
-        # 3. Call CatVTON model on Hugging Face Space
-        composited_temp_path = catvton_service.execute_catvton_inference(
+        # 4. Refine category using CLIP classification if auto/overall
+        if (not request.category) or request.category.strip().lower() in ["auto", "overall", "unknown"]:
+            clip_res = clip_classifier.classify_image(garment_path)
+            if clip_res and clip_res.get("confidence", 0) > 0.35:
+                effective_category = clip_res["category"]
+                handler = tryon_router_registry.get_handler(effective_category)
+                # Re-resolve photo if newly classified category has a different preferred slot
+                pref_slot = handler.get_preferred_photo_type(effective_category)
+                if pref_slot != matched_photo_type:
+                    try:
+                        _, profile_photo_path, matched_photo_type = catvton_service.resolve_profile_photo(
+                            profile_id=request.profile_id,
+                            conn=conn,
+                            category=effective_category,
+                            requested_type=pref_slot,
+                        )
+                    except Exception:
+                        pass
+
+        # 5. Execute handler synthesis pipeline
+        composited_temp_path = handler.execute(
             person_photo_path=profile_photo_path,
             garment_photo_path=garment_path,
-            category=request.category or "overall",
+            category=effective_category,
+            profile_id=request.profile_id,
+            conn=conn,
         )
 
-        # 4. Save to private storage
+        # 6. Save final composited result to private storage
         result_filename = f"tryon_{uuid4().hex}.png"
         final_storage_path = settings.STORAGE_DIR / result_filename
         shutil.copy(composited_temp_path, final_storage_path)
 
-        # 5. Insert into tryon_results SQLite table
+        # 7. Insert into SQLite tryon_results table
         created_at = datetime.now(timezone.utc).isoformat()
         cursor = conn.cursor()
         cursor.execute(
@@ -87,7 +155,7 @@ async def create_tryon(
             (
                 request.profile_id,
                 request.product_id,
-                request.category or "overall",
+                effective_category,
                 str(final_storage_path),
                 created_at,
             ),
@@ -98,13 +166,13 @@ async def create_tryon(
             id=result_id,
             profile_id=request.profile_id,
             product_id=request.product_id,
-            category=request.category or "overall",
+            category=effective_category,
+            handler_name=handler.name,
             created_at=created_at,
             access_url=f"/api/tryon/results/{result_id}/file",
         )
 
     finally:
-        # Clean up temporary garment image and workspace
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
@@ -122,11 +190,15 @@ def get_tryon_result(result_id: int, conn: sqlite3.Connection = Depends(get_db))
     if not row:
         raise HTTPException(status_code=404, detail="Try-on result not found")
 
+    # Match handler name for introspection
+    handler = tryon_router_registry.get_handler(row["category"])
+
     return TryOnResultResponse(
         id=row["id"],
         profile_id=row["profile_id"],
         product_id=row["product_id"],
         category=row["category"],
+        handler_name=handler.name,
         created_at=row["created_at"],
         access_url=f"/api/tryon/results/{row['id']}/file",
     )
@@ -179,6 +251,7 @@ def get_profile_tryon_history(profile_id: int, conn: sqlite3.Connection = Depend
             profile_id=row["profile_id"],
             product_id=row["product_id"],
             category=row["category"],
+            handler_name=tryon_router_registry.get_handler(row["category"]).name,
             created_at=row["created_at"],
             access_url=f"/api/tryon/results/{row['id']}/file",
         )
