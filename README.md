@@ -30,11 +30,15 @@ AI-Virtual-Try-On/
 │   ├── background.js        # Service worker for panel & lifecycle events
 │   ├── icons/               # 16px, 48px, 128px extension icons
 │   ├── popup/               # Extension popup UI
-│   │   ├── popup.html       # Glassmorphism popup with backend status check
+│   │   ├── popup.html       # Glassmorphism popup with backend status check & Studio link
 │   │   ├── popup.css        # Modern dark-mode styling
-│   │   └── popup.js         # API health check & side panel launcher
+│   │   └── popup.js         # API health check, side panel & profile launcher
+│   ├── profile/             # Phase 2 Digital Profile Creation Studio
+│   │   ├── profile.html     # Multi-step profile wizard & on-screen guidance
+│   │   ├── profile.css      # Studio workspace styles & validation badges
+│   │   └── profile.js       # MediaPipe upload feedback & multi-profile manager
 │   └── sidepanel/           # Chrome side panel workstation
-│       ├── sidepanel.html   # Model & garment upload + preview studio
+│       ├── sidepanel.html   # Model & garment upload + profile switcher
 │       ├── sidepanel.css    # Responsive side panel layout & controls
 │       └── sidepanel.js     # Side panel state & backend connector
 └── backend/                 # Python FastAPI Backend
@@ -42,7 +46,8 @@ AI-Virtual-Try-On/
     ├── requirements.txt     # Python backend dependencies
     ├── tryon.db             # SQLite database (auto-generated on startup)
     ├── tests/               # Backend tests
-    │   └── test_phase1.py   # Automated test suite for CRUD & storage
+    │   ├── test_phase1.py   # Test suite for CRUD & storage
+    │   └── test_phase2.py   # Test suite for MediaPipe validation & multi-profile
     └── app/
         ├── __init__.py      # Package indicator
         ├── config.py        # Settings loader with private STORAGE_DIR
@@ -51,10 +56,13 @@ AI-Virtual-Try-On/
         ├── models/          # Pydantic schemas (profiles, photos, products)
         │   ├── __init__.py
         │   └── schemas.py
-        └── routers/         # API Routers
+        ├── routers/         # API Routers
+        │   ├── __init__.py
+        │   ├── profiles.py  # Profiles CRUD + MediaPipe validated uploads
+        │   └── photos.py    # Private photo file streaming & deletion
+        └── services/        # AI & Computer Vision Services
             ├── __init__.py
-            ├── profiles.py  # Profiles CRUD + Photo upload endpoints
-            └── photos.py    # Private photo file streaming & deletion
+            └── mediapipe_validator.py  # MediaPipe Pose & Face landmark verifier
 ```
 
 ---

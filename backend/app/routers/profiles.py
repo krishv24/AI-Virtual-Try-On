@@ -148,6 +148,8 @@ def delete_profile(profile_id: int, conn: sqlite3.Connection = Depends(get_db)):
 
 # --- Profile Photos Endpoints ---
 
+from app.services.mediapipe_validator import validate_photo_landmarks
+
 @router.post("/{profile_id}/photos", response_model=ProfilePhotoResponse, status_code=status.HTTP_201_CREATED)
 async def upload_profile_photo(
     profile_id: int,
@@ -157,6 +159,7 @@ async def upload_profile_photo(
 ):
     """
     Upload a user reference body/face photo.
+    Validates human presence and relevant body landmarks using MediaPipe.
     Saves image to a secure local disk path that is NEVER publicly exposed.
     """
     cursor = conn.cursor()
@@ -172,22 +175,43 @@ async def upload_profile_photo(
             detail=f"Invalid file type '{content_type}'. Allowed types: JPG, PNG, WEBP.",
         )
 
+    # Read image contents
+    contents = await file.read()
+    if len(contents) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    # Validate landmarks with MediaPipe
+    is_valid, validation_message, metadata = validate_photo_landmarks(contents, photo_type)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"MediaPipe validation rejected: {validation_message}",
+        )
+
+    # Check for existing photo in this slot for this profile, remove old file from disk
+    cursor.execute(
+        "SELECT id, file_path FROM profile_photos WHERE profile_id = ? AND photo_type = ?;",
+        (profile_id, photo_type.value),
+    )
+    existing_row = cursor.fetchone()
+    if existing_row:
+        old_file = Path(existing_row["file_path"])
+        if old_file.exists():
+            try:
+                old_file.unlink()
+            except OSError:
+                pass
+        cursor.execute("DELETE FROM profile_photos WHERE id = ?;", (existing_row["id"],))
+
     ext = ALLOWED_MIME_TYPES[content_type]
-    # Unique safe disk filename: profile_{profile_id}_{photo_type}_{uuid}{ext}
     safe_filename = f"p{profile_id}_{photo_type.value}_{uuid.uuid4().hex[:12]}{ext}"
     destination_path = settings.STORAGE_DIR / safe_filename
 
     # Write file to non-public local disk
     try:
-        contents = await file.read()
-        if len(contents) == 0:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-
         with open(destination_path, "wb") as f:
             f.write(contents)
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
         raise HTTPException(status_code=500, detail=f"Failed to save image: {str(e)}")
 
     now = datetime.now(timezone.utc).isoformat()

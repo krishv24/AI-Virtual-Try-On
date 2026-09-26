@@ -41,6 +41,11 @@ scratch/
 tmp/
 temp/
 
+# Large Model Binaries (MediaPipe .task files auto-downloaded on first run)
+*.task
+mediapipe_models/
+backend/app/models/mediapipe_models/
+
 # IDE & OS
 .vscode/
 .idea/

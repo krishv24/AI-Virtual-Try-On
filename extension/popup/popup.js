@@ -79,5 +79,12 @@ async function openSidePanel() {
 openSidepanelBtn.addEventListener('click', openSidePanel);
 recheckBtn.addEventListener('click', checkBackendHealth);
 
+const openProfileBtn = document.getElementById('open-profile-btn');
+if (openProfileBtn) {
+  openProfileBtn.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('profile/profile.html') });
+  });
+}
+
 // Initialize on popup load
 document.addEventListener('DOMContentLoaded', checkBackendHealth);

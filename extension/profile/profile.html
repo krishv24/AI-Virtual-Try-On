@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Virtual Try-On - Digital Profile Studio</title>
+  <link rel="stylesheet" href="profile.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Navbar -->
+    <header class="navbar">
+      <div class="nav-brand">
+        <div class="logo-icon">✨</div>
+        <div>
+          <h1>AI Virtual Try-On Studio</h1>
+          <span class="subtext">Digital Wardrobe & Profile Management</span>
+        </div>
+      </div>
+      
+      <div class="nav-controls">
+        <div class="profile-select-wrapper">
+          <label for="profile-dropdown">Active Profile:</label>
+          <select id="profile-dropdown" class="profile-select">
+            <option value="" disabled selected>Loading profiles...</option>
+          </select>
+        </div>
+        <button id="new-profile-btn" class="btn btn-secondary">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          New Profile
+        </button>
+        <div id="backend-status" class="status-badge checking">
+          <span class="dot"></span>
+          <span class="status-label">API Checking</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="main-layout">
+      <!-- Left Sidebar: Profile Details & Step Navigation -->
+      <aside class="sidebar">
+        <div class="profile-summary-card">
+          <div class="profile-header">
+            <div class="avatar-ring" id="active-profile-avatar">👤</div>
+            <div>
+              <h2 id="active-profile-name">Select or Create Profile</h2>
+              <span id="active-profile-meta" class="meta-tag">No profile loaded</span>
+            </div>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-label">
+              <span>Profile Completeness</span>
+              <strong id="completeness-percent">0%</strong>
+            </div>
+            <div class="progress-track">
+              <div id="progress-fill" class="progress-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5-Step List Navigation -->
+        <nav class="steps-nav">
+          <div class="nav-item active" data-type="front_full_body">
+            <span class="step-badge">1</span>
+            <div class="step-info">
+              <strong>Front / Full-Body</strong>
+              <small>Required for overall try-on</small>
+            </div>
+            <span class="check-icon" id="badge-front_full_body">⭕</span>
+          </div>
+
+          <div class="nav-item" data-type="upper_body">
+            <span class="step-badge">2</span>
+            <div class="step-info">
+              <strong>Upper-Body</strong>
+              <small>Shirts, tops, and outerwear</small>
+            </div>
+            <span class="check-icon" id="badge-upper_body">⭕</span>
+          </div>
+
+          <div class="nav-item" data-type="legs">
+            <span class="step-badge">3</span>
+            <div class="step-info">
+              <strong>Legs / Lower-Body</strong>
+              <small>Pants, jeans, skirts, and shorts</small>
+            </div>
+            <span class="check-icon" id="badge-legs">⭕</span>
+          </div>
+
+          <div class="nav-item" data-type="feet">
+            <span class="step-badge">4</span>
+            <div class="step-info">
+              <strong>Foot / Shoe</strong>
+              <small>Sneakers, boots, and shoes</small>
+            </div>
+            <span class="check-icon" id="badge-feet">⭕</span>
+          </div>
+
+          <div class="nav-item" data-type="face">
+            <span class="step-badge">5</span>
+            <div class="step-info">
+              <strong>Face / Portrait</strong>
+              <small>Neckline, eyewear, and hats</small>
+            </div>
+            <span class="check-icon" id="badge-face">⭕</span>
+          </div>
+        </nav>
+
+        <div class="sidebar-actions">
+          <button id="delete-profile-btn" class="btn btn-danger-outline" disabled>
+            Delete Active Profile
+          </button>
+        </div>
+      </aside>
+
+      <!-- Center / Right: Upload Staging & MediaPipe Feedback -->
+      <section class="stage-section">
+        <!-- New Profile Creation Modal / Panel -->
+        <div id="create-profile-dialog" class="dialog-card hidden">
+          <h3>Create New Fitting Profile</h3>
+          <p class="dialog-desc">Create distinct profiles (e.g. "Everyday", "Athletic", "Formal") for tailored AI try-ons.</p>
+          <div class="input-group">
+            <label for="profile-name-input">Profile Name</label>
+            <input type="text" id="profile-name-input" placeholder="e.g. Everyday Fit" maxlength="60">
+          </div>
+          <div class="dialog-buttons">
+            <button id="cancel-create-btn" class="btn btn-ghost">Cancel</button>
+            <button id="submit-create-btn" class="btn btn-primary">Create Profile</button>
+          </div>
+        </div>
+
+        <!-- Active Step Upload Card -->
+        <div class="stage-card" id="stage-card">
+          <div class="stage-header">
+            <div>
+              <span class="step-tag" id="current-step-tag">Step 1 of 5</span>
+              <h2 id="current-step-title">Front / Full-Body Photo</h2>
+              <p id="current-step-desc" class="stage-subtitle">
+                A full-length head-to-toe photo. MediaPipe checks for shoulder, hip, knee, and ankle keypoints.
+              </p>
+            </div>
+            <div class="mediapipe-status-pill" id="mp-status-pill">
+              <span class="mp-dot"></span>
+              <span id="mp-status-text">MediaPipe Guard Active</span>
+            </div>
+          </div>
+
+          <!-- Guidelines Box -->
+          <div class="guidelines-card">
+            <h4>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              On-Screen Photo Guidance
+            </h4>
+            <ul id="current-guidance-list" class="guidance-list">
+              <!-- Dynamically populated based on active step -->
+            </ul>
+          </div>
+
+          <!-- Staging / Dropzone Area -->
+          <div class="upload-workbench">
+            <div class="drop-zone-main" id="main-drop-zone">
+              <div id="drop-zone-empty" class="drop-zone-content">
+                <div class="upload-icon-wrapper">
+                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                </div>
+                <p class="upload-title">Drag & drop photo here or <strong>browse files</strong></p>
+                <span class="upload-hint">Supports JPG, PNG, WEBP up to 10MB</span>
+              </div>
+
+              <!-- Preview & MediaPipe Overlay -->
+              <div id="drop-zone-preview" class="preview-container hidden">
+                <img id="preview-image" src="" alt="Photo Preview">
+                <div id="mp-analyzing-overlay" class="analyzing-overlay hidden">
+                  <div class="spinner"></div>
+                  <p>MediaPipe validating landmarks...</p>
+                </div>
+              </div>
+
+              <input type="file" id="step-file-input" accept="image/jpeg, image/png, image/webp" class="hidden-file-input">
+            </div>
+
+            <!-- MediaPipe Feedback Notice -->
+            <div id="validation-banner" class="validation-banner hidden">
+              <div class="banner-icon" id="banner-icon">ℹ️</div>
+              <div class="banner-content">
+                <strong id="banner-title">Validation Notice</strong>
+                <p id="banner-message">Details regarding landmark detection.</p>
+              </div>
+            </div>
+
+            <!-- Navigation Controls -->
+            <div class="stage-footer">
+              <button id="prev-step-btn" class="btn btn-secondary" disabled>
+                Previous Step
+              </button>
+              <div class="footer-actions">
+                <button id="delete-photo-btn" class="btn btn-danger-outline hidden">
+                  Remove Photo
+                </button>
+                <button id="next-step-btn" class="btn btn-primary">
+                  Next Step
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="profile.js"></script>
+</body>
+</html>
