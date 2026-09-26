@@ -7,3 +7,5 @@ Tech stack (mention this in Phase 0, and again if a later phase seems to forget 
     Category classification: CLIP (open-weight, free)
     Pose/body landmarks: MediaPipe (free, local)
     Optional styling text: Groq or Gemini free tier — no OpenAI/Anthropic paid usage anywhere
+
+

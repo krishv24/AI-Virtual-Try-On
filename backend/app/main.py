@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.database import init_db
-from app.routers import profiles_router, photos_router, products_router
+from app.routers import profiles_router, photos_router, products_router, tryon_router
 
 
 @asynccontextmanager
@@ -40,6 +40,8 @@ app.add_middleware(
 app.include_router(profiles_router)
 app.include_router(photos_router)
 app.include_router(products_router)
+app.include_router(tryon_router)
+
 
 
 class HealthResponse(BaseModel):

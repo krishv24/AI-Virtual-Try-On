@@ -53,10 +53,24 @@ class ProductResponse(BaseModel):
     price: Optional[str]
     detected_at: str
 
+class TryOnRequest(BaseModel):
+    profile_id: int = Field(..., description="ID of the user profile")
+    garment_image_url: str = Field(..., description="URL or data URI of the garment image")
+    product_id: Optional[int] = Field(None, description="Optional associated product ID")
+    category: Optional[str] = Field("overall", description="Garment type (upper, lower, overall)")
+    photo_type: Optional[PhotoType] = Field(None, description="Specific profile photo type to use")
+
 class TryOnResultResponse(BaseModel):
     id: int
     profile_id: int
-    product_id: Optional[int]
+    product_id: Optional[int] = None
     category: str
     created_at: str
     access_url: str
+
+class TryOnStatusResponse(BaseModel):
+    space_id: str
+    stage: str
+    is_ready: bool
+    space_url: str
+

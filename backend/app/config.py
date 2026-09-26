@@ -23,7 +23,8 @@ class Settings(BaseSettings):
     
     # AI Models (Free tiers from techstack.txt)
     HF_TOKEN: str = ""
-    HF_CATVTON_SPACE_URL: str = ""
+    HF_SPACE_ID: str = "krishv10/AI_Try_On"
+    HF_CATVTON_SPACE_URL: str = "https://krishv10-ai-try-on.hf.space"
     GROQ_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
 

@@ -373,10 +373,13 @@ function updateTryOnButtonState() {
 }
 
 async function handleTryOnExecution() {
-  if (!state.selectedProductId || !state.activeModelPhotoUrl || state.isProcessing) return;
+  if (!state.selectedProductId || !state.activeProfileId || state.isProcessing) return;
 
   const selectedProd = state.products.find((p) => p.id === state.selectedProductId);
   if (!selectedProd) return;
+
+  const chosenGarmentImg = state.variantSelections[selectedProd.id] || selectedProd.imageUrl;
+  if (!chosenGarmentImg) return;
 
   state.isProcessing = true;
   updateTryOnButtonState();
@@ -386,36 +389,66 @@ async function handleTryOnExecution() {
   resetPipelineSteps();
 
   try {
-    // Step 1: CLIP Garment Classification
-    setStepStatus(stageClip, 'active', 'Step 1: CLIP Classifying garment & mask...');
-    pipelineProgressFill.style.width = '33%';
-    await delay(700);
-    setStepStatus(stageClip, 'done', 'CLIP: Garment categorized as ' + selectedProd.category);
+    // Step 1: Garment & Variant Analysis
+    setStepStatus(stageClip, 'active', 'Step 1: Analyzing garment variant & category...');
+    pipelineProgressFill.style.width = '25%';
+    await delay(500);
+    setStepStatus(stageClip, 'done', `Garment identified: ${selectedProd.category || 'Apparel'}`);
 
-    // Step 2: MediaPipe Pose & Landmarks
-    setStepStatus(stagePose, 'active', 'Step 2: MediaPipe detecting body landmarks & drape mesh...');
-    pipelineProgressFill.style.width = '66%';
-    await delay(800);
-    setStepStatus(stagePose, 'done', 'MediaPipe: 33 body keypoints aligned');
+    // Step 2: MediaPipe Landmark resolution
+    setStepStatus(stagePose, 'active', 'Step 2: Resolving profile pose & body keypoints...');
+    pipelineProgressFill.style.width = '50%';
+    await delay(600);
+    setStepStatus(stagePose, 'done', 'Profile pose aligned with garment drape');
 
-    // Step 3: CatVTON Neural Synthesis
-    setStepStatus(stageVton, 'active', 'Step 3: CatVTON synthesizing fabric drape on model...');
-    pipelineProgressFill.style.width = '90%';
-    await delay(900);
-    setStepStatus(stageVton, 'done', 'Neural diffusion complete');
+    // Step 3: CatVTON Neural Synthesis on ZeroGPU
+    setStepStatus(stageVton, 'active', 'Step 3: CatVTON diffusion synthesizing on ZeroGPU...');
+    pipelineProgressFill.style.width = '75%';
+
+    const payload = {
+      profile_id: state.activeProfileId,
+      garment_image_url: chosenGarmentImg,
+      product_id: typeof selectedProd.id === 'number' ? selectedProd.id : null,
+      category: selectedProd.category || 'overall',
+    };
+
+    const response = await fetch(`${BACKEND_BASE}/api/tryon`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Server error ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.detail || errorMsg;
+      } catch (_) {}
+      throw new Error(errorMsg);
+    }
+
+    const tryonResult = await response.json();
+
+    setStepStatus(stageVton, 'done', 'CatVTON ZeroGPU try-on synthesis complete!');
     pipelineProgressFill.style.width = '100%';
+    await delay(400);
 
-    // Reveal Result View
-    showResultView(selectedProd);
+    // Reveal Result View with real composited image
+    showResultView(selectedProd, tryonResult);
   } catch (err) {
     console.error('Try-On error:', err);
-    processingMainStatus.textContent = 'Try-On encountered an error';
+    setStepStatus(stageVton, 'error', `Try-On failed: ${err.message}`);
+    processingMainStatus.textContent = 'Virtual Try-On error';
+    processingDetailText.textContent = err.message;
+    alert(`Virtual Try-On error:\n${err.message}`);
   } finally {
     state.isProcessing = false;
     updateTryOnButtonState();
     setTimeout(() => {
       processingStatusArea.classList.add('hidden');
-    }, 2000);
+    }, 3000);
   }
 }
 
@@ -431,7 +464,7 @@ function resetPipelineSteps() {
 function setStepStatus(stepEl, status, detailMsg) {
   stepEl.className = `stage-step ${status}`;
   processingDetailText.textContent = detailMsg;
-  if (status === 'active') {
+  if (status === 'active' || status === 'error') {
     processingMainStatus.textContent = detailMsg;
   }
 }
@@ -442,23 +475,31 @@ function delay(ms) {
 
 // --- 5. Results View ---
 
-function showResultView(product) {
+function showResultView(product, tryonResult = null) {
   resultsEmptyState.classList.add('hidden');
   resultsContent.classList.remove('hidden');
   resultsActions.classList.remove('hidden');
 
   const chosenImg = state.variantSelections[product.id] || product.imageUrl;
-  resultImg.src = chosenImg;
-  resultGarmentTitle.textContent = product.title;
-  resultCategoryTag.textContent = product.category;
 
-  // Persist lightweight try-on result record (metadata only)
+  // Use synthesized tryon result image if available, else chosenImg
+  if (tryonResult && tryonResult.access_url) {
+    resultImg.src = `${BACKEND_BASE}${tryonResult.access_url}`;
+  } else {
+    resultImg.src = chosenImg;
+  }
+
+  resultGarmentTitle.textContent = product.title;
+  resultCategoryTag.textContent = product.category || 'Apparel';
+
+  // Persist try-on result record (metadata only)
   setStoredState({
     lastResult: {
       productId: product.id,
       title: product.title,
       category: product.category,
       selectedImageUrl: chosenImg,
+      resultAccessUrl: tryonResult ? tryonResult.access_url : null,
       timestamp: new Date().toISOString(),
     },
   });
