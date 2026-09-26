@@ -143,6 +143,21 @@ def test_phase12_suite():
         timeout_detail = timeout_res.json()["detail"]
         print(f"PASS: Model timeout handled and surfaced with user guidance: '{timeout_detail}'")
 
+    # 6. Test Non-Boolean force_refresh Serialization Resilience
+    print("\n--- 6. Testing Non-Boolean force_refresh Resilience ---")
+    res_dict_force = client.post(
+        "/api/tryon",
+        json={
+            "profile_id": profile_id,
+            "garment_image_url": garment_b64,
+            "category": "shirt",
+            "force_refresh": {},  # Empty object like a serialized browser event
+        },
+    )
+    # Must NOT fail with 422 validation error
+    assert res_dict_force.status_code != 422, res_dict_force.text
+    print("PASS: Object-like force_refresh safely coerced to False without 422 error")
+
     # Clean up profile
     client.delete(f"/api/profiles/{profile_id}")
 

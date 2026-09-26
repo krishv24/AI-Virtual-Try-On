@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 class PhotoType(str, Enum):
     FRONT_FULL_BODY = "front_full_body"
@@ -63,6 +63,18 @@ class TryOnRequest(BaseModel):
     category: Optional[str] = Field("overall", description="Garment type (upper, lower, overall)")
     photo_type: Optional[PhotoType] = Field(None, description="Specific profile photo type to use")
     force_refresh: bool = Field(False, description="Bypass cache and force re-generation")
+
+    @field_validator("force_refresh", mode="before")
+    @classmethod
+    def validate_force_refresh(cls, v: Any) -> bool:
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes")
+        if isinstance(v, (int, float)):
+            return bool(v)
+        # Any dict, object, or None sent from browser clicks defaults safely to False
+        return False
 
 class ClassifyRequest(BaseModel):
     image_url: str = Field(..., description="Garment image URL or data URI")

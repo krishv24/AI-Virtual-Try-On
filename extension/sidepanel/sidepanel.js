@@ -462,6 +462,40 @@ function stopProgressTracker(success = true) {
   }
 }
 
+function formatErrorMessage(errorData, fallbackStatus) {
+  if (!errorData) return `Server error ${fallbackStatus || 500}`;
+  if (typeof errorData === 'string') return errorData;
+
+  // FastAPI validation error list: {"detail": [{"loc": [...], "msg": "..."}]}
+  if (Array.isArray(errorData.detail)) {
+    return errorData.detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        const field = Array.isArray(item.loc) ? item.loc.filter((k) => k !== 'body').join('.') : '';
+        const msg = item.msg || item.message || JSON.stringify(item);
+        return field ? `${field}: ${msg}` : msg;
+      })
+      .join(' | ');
+  }
+
+  if (typeof errorData.detail === 'object' && errorData.detail !== null) {
+    return errorData.detail.message || errorData.detail.msg || errorData.detail.detail || errorData.detail.error || JSON.stringify(errorData.detail);
+  }
+
+  if (typeof errorData.detail === 'string') {
+    return errorData.detail;
+  }
+
+  if (errorData.message) return String(errorData.message);
+  if (errorData.error) return String(errorData.error);
+
+  try {
+    return JSON.stringify(errorData);
+  } catch (_) {
+    return String(errorData);
+  }
+}
+
 function showErrorNotice(type, title, message, actionLabel = null, actionFn = null) {
   if (!errorNoticeCard) return;
   hideErrorNotice();
@@ -486,10 +520,19 @@ function showErrorNotice(type, title, message, actionLabel = null, actionFn = nu
     generic: 'Issue',
   };
 
+  let cleanMsg = message;
+  if (typeof message === 'object' && message !== null) {
+    try {
+      cleanMsg = message.message || message.msg || message.detail || JSON.stringify(message);
+    } catch (_) {
+      cleanMsg = String(message);
+    }
+  }
+
   if (errorCardIcon) errorCardIcon.textContent = icons[type] || '⚠️';
   if (errorCardTitle) errorCardTitle.textContent = title;
   if (errorCardBadge) errorCardBadge.textContent = badges[type] || 'Notice';
-  if (errorCardMessage) errorCardMessage.textContent = message;
+  if (errorCardMessage) errorCardMessage.textContent = cleanMsg || 'An unexpected error occurred during processing.';
 
   if (actionLabel && actionFn && errorActionBtn) {
     errorActionBtn.textContent = actionLabel;
@@ -513,6 +556,9 @@ function hideErrorNotice() {
 
 async function handleTryOnExecution(forceRefresh = false) {
   hideErrorNotice();
+
+  // Guard against PointerEvent/MouseEvent passed when used directly as event listener
+  const shouldForceRefresh = typeof forceRefresh === 'boolean' ? forceRefresh : false;
 
   // Distinct check 1: No products detected on page
   if (!state.products || state.products.length === 0) {
@@ -571,7 +617,7 @@ async function handleTryOnExecution(forceRefresh = false) {
   // Show Processing Status Area & Start Live Timer Tracker
   processingStatusArea.classList.remove('hidden');
   resetPipelineSteps();
-  startProgressTracker(forceRefresh);
+  startProgressTracker(shouldForceRefresh);
 
   try {
     const payload = {
@@ -579,7 +625,7 @@ async function handleTryOnExecution(forceRefresh = false) {
       garment_image_url: chosenGarmentImg,
       product_id: typeof selectedProd.id === 'number' ? selectedProd.id : null,
       category: selectedProd.category || 'auto',
-      force_refresh: forceRefresh,
+      force_refresh: shouldForceRefresh,
     };
 
     const response = await fetch(`${BACKEND_BASE}/api/tryon`, {
@@ -594,10 +640,13 @@ async function handleTryOnExecution(forceRefresh = false) {
       let errorMsg = `Server error ${response.status}`;
       try {
         const errorData = await response.json();
-        errorMsg = (typeof errorData.detail === 'object' && errorData.detail.message)
-          ? errorData.detail.message
-          : (errorData.detail || errorMsg);
-      } catch (_) {}
+        errorMsg = formatErrorMessage(errorData, response.status);
+      } catch (_) {
+        try {
+          const text = await response.text();
+          if (text) errorMsg = text;
+        } catch (__) {}
+      }
       throw new Error(errorMsg);
     }
 
@@ -922,7 +971,7 @@ async function scanActivePageProducts() {
 
 scanPageBtn.addEventListener('click', scanActivePageProducts);
 addDemoProductBtn.addEventListener('click', addDemoGarments);
-tryonBtn.addEventListener('click', handleTryOnExecution);
+tryonBtn.addEventListener('click', () => handleTryOnExecution(false));
 resetResultBtn.addEventListener('click', resetResultView);
 downloadResultBtn.addEventListener('click', downloadResult);
 if (forceRefreshBtn) {
