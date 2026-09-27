@@ -1285,6 +1285,8 @@ function setCompareMode(mode) {
     if (toggleDualMode) toggleDualMode.classList.remove('active');
     if (compareDualView) compareDualView.classList.add('hidden');
     if (compareSliderView) compareSliderView.classList.remove('hidden');
+    if (splitSliderContainer) splitSliderContainer.style.setProperty('--split-pos', '50%');
+    if (sliderDividerLine) sliderDividerLine.style.left = '50%';
   } else {
     if (toggleDualMode) toggleDualMode.classList.add('active');
     if (toggleSliderMode) toggleSliderMode.classList.remove('active');
@@ -1348,12 +1350,13 @@ function initSplitSlider() {
 
   const updateSliderPos = (clientX) => {
     const rect = splitSliderContainer.getBoundingClientRect();
+    if (!rect.width) return;
     let x = clientX - rect.left;
     if (x < 0) x = 0;
     if (x > rect.width) x = rect.width;
     const pct = Math.max(0, Math.min(100, (x / rect.width) * 100));
 
-    sliderFgContainer.style.width = `${pct}%`;
+    splitSliderContainer.style.setProperty('--split-pos', `${pct}%`);
     sliderDividerLine.style.left = `${pct}%`;
   };
 

@@ -1885,6 +1885,7 @@ body.light .theme-toggle-btn .icon-moon {
   cursor: ew-resize;
   user-select: none;
   box-shadow: var(--shadow);
+  --split-pos: 50%;
 }
 
 .slider-image {
@@ -1898,11 +1899,10 @@ body.light .theme-toggle-btn .icon-moon {
 
 .slider-fg-container {
   position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
+  inset: 0;
   overflow: hidden;
   pointer-events: none;
+  clip-path: polygon(0 0, var(--split-pos, 50%) 0, var(--split-pos, 50%) 100%, 0 100%);
 }
 
 .slider-fg-container .slider-fg {
@@ -1910,8 +1910,7 @@ body.light .theme-toggle-btn .icon-moon {
   height: 100%;
   object-fit: contain;
   position: absolute;
-  left: 0;
-  top: 0;
+  inset: 0;
 }
 
 .slider-divider-line {
