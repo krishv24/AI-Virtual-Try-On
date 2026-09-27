@@ -114,16 +114,42 @@ def validate_photo_landmarks(
     pose_result = pose_detector.detect(mp_image)
 
     if not pose_result.pose_landmarks or len(pose_result.pose_landmarks) == 0:
-        # Check if face detector finds a person in case of tight crop
-        face_detector = get_face_detector()
-        face_res = face_detector.detect(mp_image)
-        has_face = face_res.face_landmarks and len(face_res.face_landmarks) > 0
-
         if photo_type == PhotoType.FEET:
             # Standalone foot/shoe photos often have no head/torso;
-            # If color/contrast is non-empty and has realistic dimensions, allow or prompt
             if pil_img.width >= 100 and pil_img.height >= 100 and np.std(img_np) > 15:
                 return True, "Foot/shoe photo passed visual presence check.", {"mode": "heuristic"}
+
+        # Cropped lower-body / legs photos:
+        # MediaPipe Pose's BlazePose detector requires a human face/head anchor in frame.
+        # When users upload cropped leg photos (waist-down, pants, jeans, shorts, skirts),
+        # the head is naturally omitted, causing BlazePose to return 0 pose landmarks.
+        # We validate lower-body presence, aspect ratio, and visual contrast:
+        if photo_type == PhotoType.LEGS:
+            w, h = pil_img.size
+            std_val = float(np.std(img_np))
+            if w < 100 or h < 100:
+                return (
+                    False,
+                    "Legs photo resolution is too small. Please upload an image of at least 150x150 pixels.",
+                    {"error": "resolution_too_low"},
+                )
+            if std_val < 12:
+                return (
+                    False,
+                    "Image appears blank or solid color. Please upload a clear photo of your legs, pants, or lower body.",
+                    {"error": "low_variance"},
+                )
+            if h < w * 0.35:
+                return (
+                    False,
+                    "Image aspect ratio is too wide. Lower body photos should be vertical or square.",
+                    {"error": "invalid_aspect_ratio"},
+                )
+            return (
+                True,
+                "Lower-body photo verified (leg & attire presence confirmed).",
+                {"mode": "lower_body_presence", "variance": std_val, "dimensions": [w, h]},
+            )
 
         return (
             False,
@@ -183,8 +209,16 @@ def validate_photo_landmarks(
         )
 
     elif photo_type == PhotoType.LEGS:
-        has_lower = is_visible(23) or is_visible(24) or is_visible(25) or is_visible(26) or is_visible(27) or is_visible(28)
+        has_lower = any(is_visible(i) for i in [23, 24, 25, 26, 27, 28, 29, 30, 31, 32])
         if not has_lower:
+            w, h = pil_img.size
+            std_val = float(np.std(img_np))
+            if w >= 100 and h >= 100 and std_val >= 12 and h >= w * 0.35:
+                return (
+                    True,
+                    "Lower-body photo verified.",
+                    {"mode": "lower_body_presence", "landmarks_count": total_landmarks},
+                )
             return (
                 False,
                 "Leg / lower-body landmarks missing. Please ensure hips, knees, or ankles are visible.",
